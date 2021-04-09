@@ -21,9 +21,13 @@ func resourceAwsTransferUser() *schema.Resource {
 		Read:   resourceAwsTransferUserRead,
 		Update: resourceAwsTransferUserUpdate,
 		Delete: resourceAwsTransferUserDelete,
+
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
 		},
+
+		CustomizeDiff: SetTagsDiff,
+
 		Schema: map[string]*schema.Schema{
 
 			"arn": {
@@ -83,7 +87,8 @@ func resourceAwsTransferUser() *schema.Resource {
 				ValidateFunc: validateTransferServerID,
 			},
 
-			"tags": tagsSchema(),
+			"tags":     tagsSchema(),
+			"tags_all": tagsSchemaComputed(),
 
 			"user_name": {
 				Type:         schema.TypeString,
@@ -97,6 +102,8 @@ func resourceAwsTransferUser() *schema.Resource {
 
 func resourceAwsTransferUserCreate(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).transferconn
+	defaultTagsConfig := meta.(*AWSClient).DefaultTagsConfig
+	tags := defaultTagsConfig.MergeTags(keyvaluetags.New(d.Get("tags").(map[string]interface{})))
 	userName := d.Get("user_name").(string)
 	serverID := d.Get("server_id").(string)
 
@@ -122,8 +129,8 @@ func resourceAwsTransferUserCreate(d *schema.ResourceData, meta interface{}) err
 		createOpts.Policy = aws.String(attr.(string))
 	}
 
-	if attr, ok := d.GetOk("tags"); ok {
-		createOpts.Tags = keyvaluetags.New(attr.(map[string]interface{})).IgnoreAws().TransferTags()
+	if len(tags) > 0 {
+		createOpts.Tags = tags.IgnoreAws().TransferTags()
 	}
 
 	log.Printf("[DEBUG] Create Transfer User Option: %#v", createOpts)
@@ -140,6 +147,7 @@ func resourceAwsTransferUserCreate(d *schema.ResourceData, meta interface{}) err
 
 func resourceAwsTransferUserRead(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).transferconn
+	defaultTagsConfig := meta.(*AWSClient).DefaultTagsConfig
 	ignoreTagsConfig := meta.(*AWSClient).IgnoreTagsConfig
 
 	serverID, userName, err := decodeTransferUserId(d.Id())
@@ -176,8 +184,15 @@ func resourceAwsTransferUserRead(d *schema.ResourceData, meta interface{}) error
 		return fmt.Errorf("Error setting home_directory_mappings: %s", err)
 	}
 
-	if err := d.Set("tags", keyvaluetags.TransferKeyValueTags(resp.User.Tags).IgnoreAws().IgnoreConfig(ignoreTagsConfig).Map()); err != nil {
-		return fmt.Errorf("Error setting tags: %s", err)
+	tags := keyvaluetags.TransferKeyValueTags(resp.User.Tags).IgnoreAws().IgnoreConfig(ignoreTagsConfig)
+
+	//lintignore:AWSR002
+	if err := d.Set("tags", tags.RemoveDefaultConfig(defaultTagsConfig).Map()); err != nil {
+		return fmt.Errorf("error setting tags: %s", err)
+	}
+
+	if err := d.Set("tags_all", tags.Map()); err != nil {
+		return fmt.Errorf("error setting tags_all: %s", err)
 	}
 	return nil
 }
@@ -232,8 +247,8 @@ func resourceAwsTransferUserUpdate(d *schema.ResourceData, meta interface{}) err
 		}
 	}
 
-	if d.HasChange("tags") {
-		o, n := d.GetChange("tags")
+	if d.HasChange("tags_all") {
+		o, n := d.GetChange("tags_all")
 		if err := keyvaluetags.TransferUpdateTags(conn, d.Get("arn").(string), o, n); err != nil {
 			return fmt.Errorf("error updating tags: %s", err)
 		}

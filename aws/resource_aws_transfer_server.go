@@ -24,6 +24,8 @@ func resourceAwsTransferServer() *schema.Resource {
 			State: schema.ImportStatePassthrough,
 		},
 
+		CustomizeDiff: SetTagsDiff,
+
 		Schema: map[string]*schema.Schema{
 			"arn": {
 				Type:     schema.TypeString,
@@ -136,7 +138,8 @@ func resourceAwsTransferServer() *schema.Resource {
 func resourceAwsTransferServerCreate(d *schema.ResourceData, meta interface{}) error {
 	updateAfterCreate := false
 	conn := meta.(*AWSClient).transferconn
-	tags := keyvaluetags.New(d.Get("tags").(map[string]interface{})).IgnoreAws().TransferTags()
+	defaultTagsConfig := meta.(*AWSClient).DefaultTagsConfig
+	tags := defaultTagsConfig.MergeTags(keyvaluetags.New(d.Get("tags").(map[string]interface{}))).IgnoreAws().TransferTags()
 	createOpts := &transfer.CreateServerInput{}
 
 	if len(tags) != 0 {
@@ -255,6 +258,7 @@ func resourceAwsTransferServerCreate(d *schema.ResourceData, meta interface{}) e
 
 func resourceAwsTransferServerRead(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).transferconn
+	defaultTagsConfig := meta.(*AWSClient).DefaultTagsConfig
 	ignoreTagsConfig := meta.(*AWSClient).IgnoreTagsConfig
 
 	descOpts := &transfer.DescribeServerInput{
@@ -289,8 +293,15 @@ func resourceAwsTransferServerRead(d *schema.ResourceData, meta interface{}) err
 	d.Set("logging_role", resp.Server.LoggingRole)
 	d.Set("host_key_fingerprint", resp.Server.HostKeyFingerprint)
 
-	if err := d.Set("tags", keyvaluetags.TransferKeyValueTags(resp.Server.Tags).IgnoreAws().IgnoreConfig(ignoreTagsConfig).Map()); err != nil {
-		return fmt.Errorf("Error setting tags: %s", err)
+	tags := keyvaluetags.TransferKeyValueTags(resp.Server.Tags).IgnoreAws().IgnoreConfig(ignoreTagsConfig)
+
+	//lintignore:AWSR002
+	if err := d.Set("tags", tags.RemoveDefaultConfig(defaultTagsConfig).Map()); err != nil {
+		return fmt.Errorf("error setting tags: %s", err)
+	}
+
+	if err := d.Set("tags_all", tags.Map()); err != nil {
+		return fmt.Errorf("error setting tags_all: %s", err)
 	}
 	return nil
 }
@@ -365,8 +376,8 @@ func resourceAwsTransferServerUpdate(d *schema.ResourceData, meta interface{}) e
 		}
 	}
 
-	if d.HasChange("tags") {
-		o, n := d.GetChange("tags")
+	if d.HasChange("tags_all") {
+		o, n := d.GetChange("tags_all")
 		if err := keyvaluetags.TransferUpdateTags(conn, d.Get("arn").(string), o, n); err != nil {
 			return fmt.Errorf("error updating tags: %s", err)
 		}
