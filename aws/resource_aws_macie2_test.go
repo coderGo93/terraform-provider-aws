@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"os"
 	"testing"
 )
 
@@ -47,6 +48,13 @@ func TestAccAWSMacie2_serial(t *testing.T) {
 			"basic":      testAccAwsMacie2OrganizationAdminAccount_basic,
 			"disappears": testAccAwsMacie2OrganizationAdminAccount_disappears,
 		},
+		"Invitation": {
+			"basic":      testAccAwsMacie2Invitation_basic,
+			"disappears": testAccAwsMacie2Invitation_disappears,
+		},
+		"InvitationAccepter": {
+			"basic": testAccAwsMacie2InvitationAccepter_basic,
+		},
 	}
 
 	for group, m := range testCases {
@@ -60,4 +68,22 @@ func TestAccAWSMacie2_serial(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testAccAWSMacie2MemberFromEnv(t *testing.T) (string, string) {
+	accountID := os.Getenv("AWS_MACIE_MEMBER_ACCOUNT_ID")
+	if accountID == "" {
+		t.Skip(
+			"Environment variable AWS_MACIE_MEMBER_ACCOUNT_ID is not set. " +
+				"To properly test inviting MACIE member accounts, " +
+				"a valid AWS account ID must be provided.")
+	}
+	email := os.Getenv("AWS_MACIE_MEMBER_EMAIL")
+	if email == "" {
+		t.Skip(
+			"Environment variable AWS_MACIE_MEMBER_EMAIL is not set. " +
+				"To properly test inviting MACIE member accounts, " +
+				"a valid email associated with the AWS_MACIE_MEMBER_ACCOUNT_ID must be provided.")
+	}
+	return accountID, email
 }

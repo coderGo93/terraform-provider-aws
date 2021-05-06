@@ -846,6 +846,8 @@ func Provider() *schema.Provider {
 			"aws_macie2_classification_job":                           resourceAwsMacie2ClassificationJob(),
 			"aws_macie2_custom_data_identifier":                       resourceAwsMacie2CustomDataIdentifier(),
 			"aws_macie2_findings_filter":                              resourceAwsMacie2FindingsFilter(),
+			"aws_macie2_invitation":                                   resourceAwsMacie2Invitation(),
+			"aws_macie2_invitation_accepter":                          resourceAwsMacie2InvitationAccepter(),
 			"aws_macie2_member":                                       resourceAwsMacie2Member(),
 			"aws_macie2_organization_admin_account":                   resourceAwsMacie2OrganizationAdminAccount(),
 			"aws_macie_member_account_association":                    resourceAwsMacieMemberAccountAssociation(),
