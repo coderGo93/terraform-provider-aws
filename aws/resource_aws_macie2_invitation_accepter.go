@@ -111,7 +111,7 @@ func resourceMacie2InvitationAccepterRead(ctx context.Context, d *schema.Resourc
 	output, err := conn.GetAdministratorAccountWithContext(ctx, input)
 
 	if tfawserr.ErrCodeEquals(err, macie2.ErrCodeResourceNotFoundException) ||
-		tfawserr.ErrCodeEquals(err, macie2.ErrCodeAccessDeniedException) {
+		tfawserr.ErrMessageContains(err, macie2.ErrCodeAccessDeniedException, "Macie is not enabled") {
 		log.Printf("[WARN] Macie InvitationAccepter (%s) not found, removing from state", d.Id())
 		d.SetId("")
 		return nil
@@ -138,7 +138,7 @@ func resourceMacie2InvitationAccepterDelete(ctx context.Context, d *schema.Resou
 	_, err := conn.DisassociateFromAdministratorAccountWithContext(ctx, input)
 	if err != nil {
 		if tfawserr.ErrCodeEquals(err, macie2.ErrCodeResourceNotFoundException) ||
-			tfawserr.ErrCodeEquals(err, macie2.ErrCodeAccessDeniedException) {
+			tfawserr.ErrMessageContains(err, macie2.ErrCodeAccessDeniedException, "Macie is not enabled") {
 			return nil
 		}
 		return diag.FromErr(fmt.Errorf("error disassociating Macie InvitationAccepter (%s): %w", d.Id(), err))

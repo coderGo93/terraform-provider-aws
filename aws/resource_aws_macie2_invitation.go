@@ -99,7 +99,7 @@ func resourceMacie2InvitationDelete(ctx context.Context, d *schema.ResourceData,
 	output, err := conn.DeleteInvitationsWithContext(ctx, input)
 	if err != nil {
 		if tfawserr.ErrCodeEquals(err, macie2.ErrCodeResourceNotFoundException) ||
-			tfawserr.ErrCodeEquals(err, macie2.ErrCodeAccessDeniedException) {
+			tfawserr.ErrMessageContains(err, macie2.ErrCodeAccessDeniedException, "Macie is not enabled") {
 			return nil
 		}
 		return diag.FromErr(fmt.Errorf("error deleting Macie Invitation (%s): %w", d.Id(), err))
