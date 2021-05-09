@@ -3,12 +3,12 @@ subcategory: "Macie"
 layout: "aws"
 page_title: "AWS: aws_macie2_invitation"
 description: |-
-  Provides a resource to manage an AWS Macie Invitation.
+  Provides a resource to manage an Amazon Macie Invitation.
 ---
 
 # Resource: aws_macie2_invitation
 
-Provides a resource to manage an [AWS Macie Invitation](https://docs.aws.amazon.com/macie/latest/APIReference/invitations.html).
+Provides a resource to manage an [Amazon Macie Invitation](https://docs.aws.amazon.com/macie/latest/APIReference/invitations.html).
 
 ## Example Usage
 

@@ -3,12 +3,12 @@ subcategory: "Macie"
 layout: "aws"
 page_title: "AWS: aws_macie2_invitation_accepter"
 description: |-
-  Provides a resource to manage an AWS Macie Invitation Accepter.
+  Provides a resource to manage an Amazon Macie Invitation Accepter.
 ---
 
 # Resource: aws_macie2_invitation_accepter
 
-Provides a resource to manage an [AWS Macie Invitation Accepter](https://docs.aws.amazon.com/macie/latest/APIReference/invitations-accept.html).
+Provides a resource to manage an [Amazon Macie Invitation Accepter](https://docs.aws.amazon.com/macie/latest/APIReference/invitations-accept.html).
 
 ## Example Usage
 
