@@ -45,6 +45,44 @@ func testAccAwsMacie2InvitationAccepter_basic(t *testing.T) {
 	})
 }
 
+func testAccAwsMacie2InvitationAccepter_memberStatus(t *testing.T) {
+	var providers []*schema.Provider
+	resourceName := "aws_macie2_invitation_accepter.test"
+	adminAccountID := "124861550386"
+	accountID, email := testAccAWSMacie2MemberFromEnv(t)
+	accountIds := []string{accountID}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccAlternateAccountPreCheck(t)
+		},
+		ProviderFactories: testAccProviderFactoriesAlternate(&providers),
+		CheckDestroy:      testAccCheckAwsMacie2InvitationAccepterDestroy,
+		ErrorCheck:        testAccErrorCheck(t, macie2.EndpointsID),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAwsMacieInvitationAccepterConfigMemberStatus(accountID, email, adminAccountID, macie2.MacieStatusEnabled, accountIds),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAwsMacie2InvitationAccepterExists(resourceName),
+				),
+			},
+			{
+				Config: testAccAwsMacieInvitationAccepterConfigMemberStatus(accountID, email, adminAccountID, macie2.MacieStatusPaused, accountIds),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAwsMacie2InvitationAccepterExists(resourceName),
+				),
+			},
+			{
+				Config:            testAccAwsMacieInvitationAccepterConfigBasic(accountID, email, adminAccountID, accountIds),
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
 func testAccCheckAwsMacie2InvitationAccepterExists(resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
@@ -88,7 +126,7 @@ func testAccCheckAwsMacie2InvitationAccepterDestroy(s *terraform.State) error {
 		}
 
 		if tfawserr.ErrCodeEquals(err, macie2.ErrCodeResourceNotFoundException) ||
-			tfawserr.ErrCodeEquals(err, macie2.ErrCodeAccessDeniedException) {
+			tfawserr.ErrMessageContains(err, macie2.ErrCodeAccessDeniedException, "Macie is not enabled") {
 			continue
 		}
 
@@ -113,22 +151,52 @@ resource "aws_macie2_account" "primary" {
 resource "aws_macie2_account" "member" {}
 
 resource "aws_macie2_member" "primary" {
-  provider = "awsalternate"
+  provider   = "awsalternate"
   account_id = %[1]q
-  email = %[2]q
+  email      = %[2]q
   depends_on = [aws_macie2_account.primary]
 }
 
 resource "aws_macie2_invitation" "primary" {
-  provider = "awsalternate"
+  provider    = "awsalternate"
   account_ids = %[3]q
-  depends_on = [aws_macie2_member.primary]
+  depends_on  = [aws_macie2_member.primary]
 }
 
 resource "aws_macie2_invitation_accepter" "test" {
   administrator_account_id = %[4]q
-  depends_on = [aws_macie2_invitation.primary]
+  depends_on               = [aws_macie2_invitation.primary]
 }
 
 `, accountID, email, accountIDs, adminAccountID)
+}
+
+func testAccAwsMacieInvitationAccepterConfigMemberStatus(accountID, email, adminAccountID, memberStatus string, accountIDs []string) string {
+	return testAccAlternateAccountProviderConfig() + fmt.Sprintf(`
+resource "aws_macie2_account" "primary" {
+  provider = "awsalternate"
+}
+
+resource "aws_macie2_account" "member" {}
+
+resource "aws_macie2_member" "primary" {
+  provider   = "awsalternate"
+  account_id = %[1]q
+  email      = %[2]q
+  status     = %[5]q
+  depends_on = [aws_macie2_account.primary]
+}
+
+resource "aws_macie2_invitation" "primary" {
+  provider    = "awsalternate"
+  account_ids = %[3]q
+  depends_on  = [aws_macie2_member.primary]
+}
+
+resource "aws_macie2_invitation_accepter" "test" {
+  administrator_account_id = %[4]q
+  depends_on               = [aws_macie2_invitation.primary]
+}
+
+`, accountID, email, accountIDs, adminAccountID, memberStatus)
 }

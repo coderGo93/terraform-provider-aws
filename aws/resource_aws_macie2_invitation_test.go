@@ -68,7 +68,7 @@ func testAccCheckAwsMacie2InvitationDestroy(s *terraform.State) error {
 		})
 
 		if tfawserr.ErrCodeEquals(err, macie2.ErrCodeResourceNotFoundException) ||
-			tfawserr.ErrCodeEquals(err, macie2.ErrCodeAccessDeniedException) {
+			tfawserr.ErrMessageContains(err, macie2.ErrCodeAccessDeniedException, "Macie is not enabled") {
 			continue
 		}
 
@@ -90,14 +90,14 @@ func testAccAwsMacieInvitationConfigBasic(accountID, email string, accountIDs []
 resource "aws_macie2_account" "test" {}
 
 resource "aws_macie2_member" "test" {
-	account_id = %[1]q
-	email = %[2]q
-	depends_on = [aws_macie2_account.test]
+  account_id = %[1]q
+  email      = %[2]q
+  depends_on = [aws_macie2_account.test]
 }
 
 resource "aws_macie2_invitation" "test" {
-	account_ids = %[3]q
-	depends_on = [aws_macie2_member.test]
+  account_ids = %[3]q
+  depends_on  = [aws_macie2_member.test]
 }
 `, accountID, email, accountIDs)
 }

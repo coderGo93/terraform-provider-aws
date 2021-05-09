@@ -53,7 +53,8 @@ func TestAccAWSMacie2_serial(t *testing.T) {
 			"disappears": testAccAwsMacie2Invitation_disappears,
 		},
 		"InvitationAccepter": {
-			"basic": testAccAwsMacie2InvitationAccepter_basic,
+			"basic":         testAccAwsMacie2InvitationAccepter_basic,
+			"member_status": testAccAwsMacie2InvitationAccepter_memberStatus,
 		},
 	}
 
