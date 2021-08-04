@@ -198,6 +198,8 @@ func Provider() *schema.Provider {
 			"aws_apigatewayv2_apis":                          dataSourceAwsApiGatewayV2Apis(),
 			"aws_appmesh_mesh":                               dataSourceAwsAppmeshMesh(),
 			"aws_appmesh_virtual_service":                    dataSourceAwsAppmeshVirtualService(),
+			"aws_appstream_image":                            dataSourceAwsAppStreamImage(),
+			"aws_appstream_images":                           dataSourceAwsAppStreamImages(),
 			"aws_arn":                                        dataSourceAwsArn(),
 			"aws_autoscaling_group":                          dataSourceAwsAutoscalingGroup(),
 			"aws_autoscaling_groups":                         dataSourceAwsAutoscalingGroups(),
