@@ -8,6 +8,7 @@ Amplify Console
 AppConfig
 AppMesh
 App Runner
+AppStream
 AppSync
 Application Autoscaling
 Athena
