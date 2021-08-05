@@ -6,40 +6,33 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/appstream"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
-
 func testAccAwsAppStreamFleet_basic(t *testing.T) {
-	var providers []*schema.Provider
 	var fleetOutput appstream.Fleet
 	resourceName := "aws_appstream_fleet.fleet"
-	dataSourceAlternate := "data.aws_caller_identity.member"
+	fleetName := acctest.RandomWithPrefix("tf-acc-test")
+	description := "Description of a fleet"
+	fleetType := "ON_DEMAND"
+	instanceType := "stream.standard.small"
 
 	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccPreCheck(t)
-			testAccAlternateAccountPreCheck(t)
-		},
-		ProviderFactories: testAccProviderFactoriesAlternate(&providers),
+		PreCheck:          func() { testAccPreCheck(t) },
+		ProviderFactories: testAccProviderFactories,
 		CheckDestroy:      testAccCheckAwsAppStreamFleetDestroy,
 		ErrorCheck:        testAccErrorCheck(t, appstream.EndpointsID),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccAwsAppStreamFleetConfigBasic(testAccDefaultEmailAddress),
+				Config: testAccAwsAppStreamFleetConfigBasic(fleetName, description, fleetType, instanceType),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckAwsAppStreamFleetExists(resourceName, &fleetOutput),
-					testAccCheckResourceAttrAccountID(resourceName, "administrator_account_id"),
-					testAccCheckResourceAttrAccountID(resourceName, "master_account_id"),
-					resource.TestCheckResourceAttrPair(resourceName, "account_id", dataSourceAlternate, "account_id"),
-					testAccCheckResourceAttrRfc3339(resourceName, "invited_at"),
-					testAccCheckResourceAttrRfc3339(resourceName, "updated_at"),
 				),
 			},
 			{
-				Config:            testAccAwsAppStreamFleetConfigBasic(testAccDefaultEmailAddress),
+				Config:            testAccAwsAppStreamFleetConfigBasic(fleetName, description, fleetType, instanceType),
 				ResourceName:      resourceName,
 				ImportState:       true,
 				ImportStateVerify: true,
@@ -49,21 +42,21 @@ func testAccAwsAppStreamFleet_basic(t *testing.T) {
 }
 
 func testAccAwsAppStreamFleet_disappears(t *testing.T) {
-	var providers []*schema.Provider
 	var fleetOutput appstream.Fleet
 	resourceName := "aws_appstream_fleet.fleet"
+	fleetName := acctest.RandomWithPrefix("tf-acc-test")
+	description := "Description of a fleet"
+	fleetType := "ON_DEMAND"
+	instanceType := "stream.standard.small"
 
 	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccPreCheck(t)
-			testAccAlternateAccountPreCheck(t)
-		},
-		ProviderFactories: testAccProviderFactoriesAlternate(&providers),
+		PreCheck:          func() { testAccPreCheck(t) },
+		ProviderFactories: testAccProviderFactories,
 		CheckDestroy:      testAccCheckAwsAppStreamFleetDestroy,
 		ErrorCheck:        testAccErrorCheck(t, appstream.EndpointsID),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccAwsAppStreamFleetConfigBasic(testAccDefaultEmailAddress),
+				Config: testAccAwsAppStreamFleetConfigBasic(fleetName, description, fleetType, instanceType),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckAwsAppStreamFleetExists(resourceName, &fleetOutput),
 					testAccCheckResourceDisappears(testAccProvider, resourceAwsAppstreamFleet(), resourceName),
@@ -74,35 +67,29 @@ func testAccAwsAppStreamFleet_disappears(t *testing.T) {
 	})
 }
 
-
 func testAccAwsAppStreamFleet_withTags(t *testing.T) {
-	var providers []*schema.Provider
 	var fleetOutput appstream.Fleet
 	resourceName := "aws_appstream_fleet.fleet"
-	dataSourceAlternate := "data.aws_caller_identity.member"
+	fleetName := acctest.RandomWithPrefix("tf-acc-test")
+	description := "Description of a fleet"
+	fleetType := "ON_DEMAND"
+	instanceType := "stream.standard.small"
 
 	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccPreCheck(t)
-			testAccAlternateAccountPreCheck(t)
-		},
-		ProviderFactories: testAccProviderFactoriesAlternate(&providers),
+		PreCheck:          func() { testAccPreCheck(t) },
+		ProviderFactories: testAccProviderFactories,
 		CheckDestroy:      testAccCheckAwsAppStreamFleetDestroy,
 		ErrorCheck:        testAccErrorCheck(t, appstream.EndpointsID),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccAwsAppStreamFleetConfigWithTags(testAccDefaultEmailAddress),
+				Config: testAccAwsAppStreamFleetConfigWithTags(fleetName, description, fleetType, instanceType),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckAwsAppStreamFleetExists(resourceName, &fleetOutput),
-					testAccCheckResourceAttrRfc3339(resourceName, "invited_at"),
 					testAccCheckResourceAttrRfc3339(resourceName, "updated_at"),
 					resource.TestCheckResourceAttr(resourceName, "tags.%", "1"),
 					resource.TestCheckResourceAttr(resourceName, "tags.Key", "value"),
 					resource.TestCheckResourceAttr(resourceName, "tags_all.%", "1"),
 					resource.TestCheckResourceAttr(resourceName, "tags_all.Key", "value"),
-					testAccCheckResourceAttrAccountID(resourceName, "administrator_account_id"),
-					testAccCheckResourceAttrAccountID(resourceName, "master_account_id"),
-					resource.TestCheckResourceAttrPair(resourceName, "account_id", dataSourceAlternate, "account_id"),
 				),
 			},
 			{
@@ -161,50 +148,81 @@ func testAccCheckAwsAppStreamFleetDestroy(s *terraform.State) error {
 
 }
 
-func testAccAwsAppStreamFleetConfigBasic(email string) string {
+func testAccAwsAppStreamFleetConfigBasic(fleetName, description, fleetType, instaceType string) string {
 	return fmt.Sprintf(`
-resource "aws_appstream_fleet" "test_fleet" {
-  name       = %[1]q
-  compute_capacity {
-    desired_instances = 1
-  }
-  description                    = %[1]q
-  disconnect_timeout             = 15
-  display_name                   = %[1]q
-  enable_default_internet_access = false
-  fleet_type                     = %[2]q
-  image_name                     = "Amazon-AppStream2-Sample-Image-02-04-2019"
-  instance_type                  = %[3]q
-  max_user_duration              = 600
-  subnet_ids                     = ["subnet-06e9b13400c225127"]
-  security_group_ids             = ["sg-0397cdfe509785903", "sg-0bd2dddff01dee52d"]
-  tags = {
-    TagName = "tag-value"
-  }
-}
-`, email)
+data "aws_appstream_images" "image" {}
+
+data "aws_availability_zones" "available" {
+  state            = "available"
 }
 
-func testAccAwsAppStreamFleetConfigWithTags(email string) string {
-	return fmt.Sprintf(`
+resource "aws_vpc" "example" {
+  cidr_block = "192.168.0.0/16"
+}
+
+resource "aws_subnet" "example" {
+  availability_zone = data.aws_availability_zones.available.names[0]
+  cidr_block        = "192.168.0.0/24"
+  vpc_id            = aws_vpc.example.id
+}
+
 resource "aws_appstream_fleet" "test_fleet" {
   name       = %[1]q
   compute_capacity {
     desired_instances = 1
   }
-  description                    = %[1]q
-  disconnect_timeout             = 15
-  display_name                   = %[1]q
-  enable_default_internet_access = false
-  fleet_type                     = %[2]q
-  image_name                     = "Amazon-AppStream2-Sample-Image-02-04-2019"
-  instance_type                  = %[3]q
-  max_user_duration              = 600
-  subnet_ids                     = ["subnet-06e9b13400c225127"]
-  security_group_ids             = ["sg-0397cdfe509785903", "sg-0bd2dddff01dee52d"]
-  tags = {
-    TagName = "tag-value"
+  description                         = %[2]q
+  idle_disconnect_timeout_in_seconds  = 70
+  display_name                        = %[1]q
+  enable_default_internet_access      = false
+  fleet_type                          = %[3]q
+  image_name                          = data.aws_appstream_images.image.results[0].name
+  instance_type                       = %[4]q
+  max_user_duration_in_seconds        = 600
+  vpc_config {
+    subnet_ids                          = [aws_subnet.example.id]
   }
 }
-`, email)
+`, fleetName, description, fleetType, instaceType)
+}
+
+func testAccAwsAppStreamFleetConfigWithTags(fleetName, description, fleetType, instaceType string) string {
+	return fmt.Sprintf(`
+data "aws_appstream_images" "image" {}
+
+data "aws_availability_zones" "available" {
+  state            = "available"
+}
+
+resource "aws_vpc" "example" {
+  cidr_block = "192.168.0.0/16"
+}
+
+resource "aws_subnet" "example" {
+  availability_zone = data.aws_availability_zones.available.names[0]
+  cidr_block        = "192.168.0.0/24"
+  vpc_id            = aws_vpc.example.id
+}
+
+resource "aws_appstream_fleet" "test_fleet" {
+  name       = %[1]q
+  compute_capacity {
+    desired_instances = 1
+  }
+  description                         = %[2]q
+  idle_disconnect_timeout_in_seconds  = 70
+  display_name                        = %[1]q
+  enable_default_internet_access      = false
+  fleet_type                          = %[3]q
+  image_name                          = data.aws_appstream_images.image.results[0].name
+  instance_type                       = %[4]q
+  max_user_duration_in_seconds        = 600
+  vpc_config {
+    subnet_ids                          = [aws_subnet.example.id]
+  }
+  tags = {
+    Key = "valuedata_source_aws_appstream_test.go"
+  }
+}
+`, fleetName, description, fleetType, instaceType)
 }

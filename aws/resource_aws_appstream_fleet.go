@@ -38,21 +38,21 @@ func resourceAwsAppstreamFleet() *schema.Resource {
 				},
 			},
 			"description": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
 				ValidateFunc: validation.StringLenBetween(0, 256),
 			},
 			"disconnect_timeout_in_seconds": {
-				Type:     schema.TypeInt,
-				Optional: true,
-				Computed: true,
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Computed:     true,
 				ValidateFunc: validation.IntBetween(60, 360000),
 			},
 			"display_name": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
 				ValidateFunc: validation.StringLenBetween(0, 100),
 			},
 			"domain_join_info": {
@@ -79,22 +79,23 @@ func resourceAwsAppstreamFleet() *schema.Resource {
 				Computed: true,
 			},
 			"fleet_type": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
-				ForceNew: true,
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ForceNew:     true,
 				ValidateFunc: validation.StringInSlice(appstream.FleetType_Values(), false),
 			},
 			"iam_role_arn": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
 				ValidateFunc: validateArn,
 			},
 			"idle_disconnect_timeout_in_seconds": {
-				Type:     schema.TypeInt,
-				Optional: true,
-				Computed: true,
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Default:      0,
+				ValidateFunc: validation.IntBetween(60, 3600),
 			},
 			"image_arn": {
 				Type:     schema.TypeString,
@@ -111,9 +112,10 @@ func resourceAwsAppstreamFleet() *schema.Resource {
 				Required: true,
 			},
 			"max_user_duration_in_seconds": {
-				Type:     schema.TypeInt,
-				Optional: true,
-				Computed: true,
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: validation.IntBetween(600, 360000),
 			},
 			"name": {
 				Type:          schema.TypeString,
@@ -130,30 +132,40 @@ func resourceAwsAppstreamFleet() *schema.Resource {
 				ConflictsWith: []string{"name"},
 			},
 			"stream_view": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
 				ValidateFunc: validation.StringInSlice(appstream.StreamView_Values(), false),
 			},
 			"state": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
 				ValidateFunc: validation.StringInSlice([]string{appstream.FleetStateRunning, appstream.FleetStateStopped}, false),
 			},
-			"security_group_ids": {
+			"vpc_config": {
 				Type:     schema.TypeList,
+				MaxItems: 1,
 				Optional: true,
 				Computed: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"security_group_ids": {
+							Type:     schema.TypeList,
+							Optional: true,
+							Computed: true,
+							Elem:     &schema.Schema{Type: schema.TypeString},
+						},
+						"subnet_ids": {
+							Type:     schema.TypeList,
+							Optional: true,
+							Computed: true,
+							Elem:     &schema.Schema{Type: schema.TypeString},
+						},
+					},
+				},
 			},
-			"subnet_ids": {
-				Type:     schema.TypeList,
-				Optional: true,
-				Computed: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
-			},
-			"tags": tagsSchema(),
+			"tags":     tagsSchema(),
 			"tags_all": tagsSchemaComputed(),
 		},
 	}
@@ -166,11 +178,9 @@ func resourceAwsAppstreamFleetCreate(ctx context.Context, d *schema.ResourceData
 	defaultTagsConfig := meta.(*AWSClient).DefaultTagsConfig
 	tags := defaultTagsConfig.MergeTags(keyvaluetags.New(d.Get("tags").(map[string]interface{})))
 
-
 	if v, ok := d.GetOk("name"); ok {
 		input.Name = aws.String(v.(string))
 	}
-
 
 	if v, ok := d.GetOk("compute_capacity"); ok {
 		input.ComputeCapacity = expandComputeCapacity(v.([]interface{}))
@@ -208,19 +218,17 @@ func resourceAwsAppstreamFleetCreate(ctx context.Context, d *schema.ResourceData
 		input.InstanceType = aws.String(v.(string))
 	}
 
+	if v, ok := d.GetOk("iam_role_arn"); ok {
+		input.IamRoleArn = aws.String(v.(string))
+	}
+
 	if v, ok := d.GetOk("max_user_duration_in_seconds"); ok {
 		input.MaxUserDurationInSeconds = aws.Int64(int64(v.(int)))
 	}
 
-	vpcConfig := &appstream.VpcConfig{}
-
-	if v, ok := d.GetOk("security_group_ids"); ok {
-		vpcConfig.SecurityGroupIds = expandStringList(v.([]interface{}))
+	if v, ok := d.GetOk("vpc_config"); ok {
+		input.VpcConfig = expandVpcConfig(v.([]interface{}))
 	}
-	if v, ok := d.GetOk("subnet_ids"); ok {
-		vpcConfig.SubnetIds = expandStringList(v.([]interface{}))
-	}
-	input.VpcConfig = vpcConfig
 
 	if len(tags) > 0 {
 		input.Tags = tags.IgnoreAws().AppstreamTags()
@@ -230,8 +238,6 @@ func resourceAwsAppstreamFleetCreate(ctx context.Context, d *schema.ResourceData
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error creating Appstream Fleet (%s): %w", d.Id(), err))
 	}
-
-
 
 	if v, ok := d.GetOk("state"); ok {
 		if v == "RUNNING" {
@@ -278,34 +284,36 @@ func resourceAwsAppstreamFleetRead(ctx context.Context, d *schema.ResourceData, 
 		return diag.FromErr(fmt.Errorf("error reading Appstream Fleet (%s): %w", d.Id(), err))
 	}
 	for _, v := range resp.Fleets {
-			d.Set("name", v.Name)
-			d.Set("name_prefix", naming.NamePrefixFromName(aws.StringValue(v.Name)))
+		d.Set("name", v.Name)
+		d.Set("name_prefix", naming.NamePrefixFromName(aws.StringValue(v.Name)))
 
-			d.Set("compute_capacity", flattenComputeCapacity(v.ComputeCapacityStatus))
-			d.Set("domain_join_info", flattenDomainInfo(v.DomainJoinInfo))
+		if err = d.Set("compute_capacity", flattenComputeCapacity(v.ComputeCapacityStatus)); err != nil {
+			return diag.FromErr(fmt.Errorf("error setting `%s` for AppStream Fleet (%s): %w", "compute_capacity", d.Id(), err))
+		}
+		if err = d.Set("domain_join_info", flattenDomainInfo(v.DomainJoinInfo)); err != nil {
+			return diag.FromErr(fmt.Errorf("error setting `%s` for AppStream Fleet (%s): %w", "domain_join_info", d.Id(), err))
+		}
 
-			d.Set("description", v.Description)
-			d.Set("display_name", v.DisplayName)
-			d.Set("disconnect_timeout_in_seconds", v.DisconnectTimeoutInSeconds)
-			d.Set("idle_disconnect_timeout_in_seconds", v.IdleDisconnectTimeoutInSeconds)
-			d.Set("enable_default_internet_access", v.EnableDefaultInternetAccess)
-			d.Set("fleet_type", v.FleetType)
-			d.Set("image_name", v.ImageName)
-			d.Set("image_arn", v.ImageArn)
-			d.Set("iam_role_arn", v.IamRoleArn)
-			d.Set("stream_view", v.StreamView)
+		d.Set("description", v.Description)
+		d.Set("display_name", v.DisplayName)
+		d.Set("disconnect_timeout_in_seconds", v.DisconnectTimeoutInSeconds)
+		d.Set("idle_disconnect_timeout_in_seconds", v.IdleDisconnectTimeoutInSeconds)
+		d.Set("enable_default_internet_access", v.EnableDefaultInternetAccess)
+		d.Set("fleet_type", v.FleetType)
+		d.Set("image_name", v.ImageName)
+		d.Set("image_arn", v.ImageArn)
+		d.Set("iam_role_arn", v.IamRoleArn)
+		d.Set("stream_view", v.StreamView)
 
-			d.Set("instance_type", v.InstanceType)
-			d.Set("max_user_duration_in_seconds", v.MaxUserDurationInSeconds)
+		d.Set("instance_type", v.InstanceType)
+		d.Set("max_user_duration_in_seconds", v.MaxUserDurationInSeconds)
+		if err = d.Set("vpc_config", flattenVpcConfig(v.VpcConfig)); err != nil {
+			return diag.FromErr(fmt.Errorf("error setting `%s` for AppStream Fleet (%s): %w", "vpc_config", d.Id(), err))
+		}
 
-			if v.VpcConfig != nil {
-				d.Set("security_group_ids", aws.StringValueSlice(v.VpcConfig.SecurityGroupIds))
-				d.Set("subnet_ids", aws.StringValueSlice(v.VpcConfig.SubnetIds))
-			}
+		d.Set("state", v.State)
 
-			d.Set("state", v.State)
-
-			return nil
+		return nil
 	}
 	return nil
 }
@@ -370,11 +378,8 @@ func resourceAwsAppstreamFleetUpdate(ctx context.Context, d *schema.ResourceData
 		input.MaxUserDurationInSeconds = aws.Int64(int64(d.Get("max_user_duration_in_seconds").(int)))
 	}
 
-	if d.HasChanges("security_group_ids", "subnet_ids") {
-		vpcConfig := &appstream.VpcConfig{}
-		vpcConfig.SubnetIds = expandStringList(d.Get("subnet_ids").([]interface{}))
-		vpcConfig.SecurityGroupIds = expandStringList(d.Get("security_group_ids").([]interface{}))
-		input.VpcConfig = vpcConfig
+	if d.HasChange("vpc_config") {
+		input.VpcConfig = expandVpcConfig(d.Get("vpc_config").([]interface{}))
 	}
 
 	_, err := conn.UpdateFleetWithContext(ctx, input)
@@ -480,7 +485,6 @@ func flattenComputeCapacity(computeCapacity *appstream.ComputeCapacityStatus) []
 	return []interface{}{compAttr}
 }
 
-
 func expandDomainJoinInfo(domainInfo []interface{}) *appstream.DomainJoinInfo {
 	if len(domainInfo) == 0 {
 		return nil
@@ -507,6 +511,36 @@ func flattenDomainInfo(domainInfo *appstream.DomainJoinInfo) []interface{} {
 	compAttr := map[string]interface{}{}
 	compAttr["directory_name"] = aws.StringValue(domainInfo.DirectoryName)
 	compAttr["organizational_unit_distinguished_name"] = aws.StringValue(domainInfo.OrganizationalUnitDistinguishedName)
+
+	return []interface{}{compAttr}
+}
+
+func expandVpcConfig(vpcConfig []interface{}) *appstream.VpcConfig {
+	if len(vpcConfig) == 0 {
+		return nil
+	}
+
+	infoConfig := &appstream.VpcConfig{}
+
+	attr := vpcConfig[0].(map[string]interface{})
+	if v, ok := attr["security_group_ids"]; ok {
+		infoConfig.SecurityGroupIds = expandStringList(v.([]interface{}))
+	}
+	if v, ok := attr["subnet_ids"]; ok {
+		infoConfig.SubnetIds = expandStringList(v.([]interface{}))
+	}
+
+	return infoConfig
+}
+
+func flattenVpcConfig(vpcConfig *appstream.VpcConfig) []interface{} {
+	if vpcConfig == nil {
+		return nil
+	}
+
+	compAttr := map[string]interface{}{}
+	compAttr["security_group_ids"] = aws.StringValueSlice(vpcConfig.SecurityGroupIds)
+	compAttr["subnet_ids"] = aws.StringValueSlice(vpcConfig.SubnetIds)
 
 	return []interface{}{compAttr}
 }
