@@ -173,14 +173,12 @@ func resourceAwsAppstreamFleet() *schema.Resource {
 
 func resourceAwsAppstreamFleetCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	conn := meta.(*AWSClient).appstreamconn
-	input := &appstream.CreateFleetInput{}
+	input := &appstream.CreateFleetInput{
+		Name: aws.String(naming.Generate(d.Get("name").(string), d.Get("name_prefix").(string))),
+	}
 
 	defaultTagsConfig := meta.(*AWSClient).DefaultTagsConfig
 	tags := defaultTagsConfig.MergeTags(keyvaluetags.New(d.Get("tags").(map[string]interface{})))
-
-	if v, ok := d.GetOk("name"); ok {
-		input.Name = aws.String(v.(string))
-	}
 
 	if v, ok := d.GetOk("compute_capacity"); ok {
 		input.ComputeCapacity = expandComputeCapacity(v.([]interface{}))
@@ -321,13 +319,8 @@ func resourceAwsAppstreamFleetRead(ctx context.Context, d *schema.ResourceData, 
 func resourceAwsAppstreamFleetUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 
 	conn := meta.(*AWSClient).appstreamconn
-	input := &appstream.UpdateFleetInput{}
-
-	if d.HasChange("name") {
-		input.Name = aws.String(naming.Generate(d.Get("name").(string), d.Get("name_prefix").(string)))
-	}
-	if d.HasChange("name_prefix") {
-		input.Name = aws.String(naming.Generate(d.Get("name").(string), d.Get("name_prefix").(string)))
+	input := &appstream.UpdateFleetInput{
+		Name: aws.String(naming.Generate(d.Get("name").(string), d.Get("name_prefix").(string))),
 	}
 
 	if d.HasChange("description") {
