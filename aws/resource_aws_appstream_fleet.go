@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -137,6 +138,10 @@ func resourceAwsAppstreamFleet() *schema.Resource {
 				Computed:     true,
 				ValidateFunc: validation.StringInSlice(appstream.StreamView_Values(), false),
 			},
+			"stack_name": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
 			"state": {
 				Type:         schema.TypeString,
 				Optional:     true,
@@ -164,6 +169,10 @@ func resourceAwsAppstreamFleet() *schema.Resource {
 						},
 					},
 				},
+			},
+			"arn": {
+				Type:         schema.TypeString,
+				Computed:     true,
 			},
 			"tags":     tagsSchema(),
 			"tags_all": tagsSchemaComputed(),
@@ -237,6 +246,18 @@ func resourceAwsAppstreamFleetCreate(ctx context.Context, d *schema.ResourceData
 		return diag.FromErr(fmt.Errorf("error creating Appstream Fleet (%s): %w", d.Id(), err))
 	}
 
+	if v, ok := d.GetOk("stack_name"); ok {
+		associateInput := &appstream.AssociateFleetInput{}
+		associateInput.FleetName = input.Name
+		associateInput.StackName = aws.String(v.(string))
+		resp, err := conn.AssociateFleet(associateInput)
+		if err != nil {
+			return diag.FromErr(fmt.Errorf("error associating Appstream Fleet (%s): %w", d.Id(), err))
+		}
+
+		log.Printf("[DEBUG] %s", resp)
+	}
+
 	if v, ok := d.GetOk("state"); ok {
 		if v == "RUNNING" {
 			desiredState := v
@@ -276,6 +297,9 @@ func resourceAwsAppstreamFleetCreate(ctx context.Context, d *schema.ResourceData
 func resourceAwsAppstreamFleetRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	conn := meta.(*AWSClient).appstreamconn
 
+	defaultTagsConfig := meta.(*AWSClient).DefaultTagsConfig
+	ignoreTagsConfig := meta.(*AWSClient).IgnoreTagsConfig
+
 	resp, err := conn.DescribeFleetsWithContext(ctx, &appstream.DescribeFleetsInput{Names: []*string{aws.String(d.Id())}})
 
 	if err != nil {
@@ -302,6 +326,7 @@ func resourceAwsAppstreamFleetRead(ctx context.Context, d *schema.ResourceData, 
 		d.Set("image_arn", v.ImageArn)
 		d.Set("iam_role_arn", v.IamRoleArn)
 		d.Set("stream_view", v.StreamView)
+		d.Set("arn", v.Arn)
 
 		d.Set("instance_type", v.InstanceType)
 		d.Set("max_user_duration_in_seconds", v.MaxUserDurationInSeconds)
@@ -310,6 +335,26 @@ func resourceAwsAppstreamFleetRead(ctx context.Context, d *schema.ResourceData, 
 		}
 
 		d.Set("state", v.State)
+
+		tg, err := conn.ListTagsForResource(&appstream.ListTagsForResourceInput{
+			ResourceArn: v.Arn,
+		})
+		if err != nil {
+			return diag.FromErr(fmt.Errorf("error listing stack tags for AppStream Stack (%s): %w", d.Id(), err))
+		}
+		if tg.Tags == nil {
+			log.Printf("[DEBUG] Apsstream Stack tags (%s) not found", d.Id())
+			return nil
+		}
+		tags := keyvaluetags.AppstreamKeyValueTags(tg.Tags).IgnoreAws().IgnoreConfig(ignoreTagsConfig)
+
+		if err = d.Set("tags", tags.RemoveDefaultConfig(defaultTagsConfig).Map()); err != nil {
+			return diag.FromErr(fmt.Errorf("error setting `%s` for AppStream Stack (%s): %w", "tags", d.Id(), err))
+		}
+
+		if err = d.Set("tags_all", tags.Map()); err != nil {
+			return diag.FromErr(fmt.Errorf("error setting `%s` for AppStream Stack (%s): %w", "tags_all", d.Id(), err))
+		}
 
 		return nil
 	}
@@ -442,8 +487,56 @@ func resourceAwsAppstreamFleetUpdate(ctx context.Context, d *schema.ResourceData
 func resourceAwsAppstreamFleetDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	conn := meta.(*AWSClient).appstreamconn
 
-	_, err := conn.DeleteFleetWithContext(ctx, &appstream.DeleteFleetInput{
-		Name: aws.String(naming.Generate(d.Get("name").(string), d.Get("name_prefix").(string))),
+	resp, err := conn.DescribeFleetsWithContext(ctx, &appstream.DescribeFleetsInput{
+		Names: aws.StringSlice([]string{*aws.String(d.Id())}),
+	})
+
+	if err != nil {
+		return diag.FromErr(fmt.Errorf("error reading Appstream Fleet (%s): %w", d.Id(), err))
+	}
+
+	currentState := aws.StringValue(resp.Fleets[0].State)
+
+	if currentState == "RUNNING" {
+		desiredState := "STOPPED"
+		_, err = conn.StopFleet(&appstream.StopFleetInput{
+			Name: aws.String(d.Id()),
+		})
+		if err != nil {
+			return diag.FromErr(fmt.Errorf("error stopping Appstream Fleet (%s): %w", d.Id(), err))
+		}
+		for {
+
+			resp, err = conn.DescribeFleetsWithContext(ctx, &appstream.DescribeFleetsInput{
+				Names: aws.StringSlice([]string{*aws.String(d.Id())}),
+			})
+			if err != nil {
+				return diag.FromErr(fmt.Errorf("error describing Appstream Fleet (%s): %w", d.Id(), err))
+			}
+
+			currentState := resp.Fleets[0].State
+			if aws.StringValue(currentState) == desiredState {
+				break
+			}
+			if aws.StringValue(currentState) != desiredState {
+				time.Sleep(20 * time.Second)
+				continue
+			}
+
+		}
+
+	}
+
+	_, err = conn.DisassociateFleet(&appstream.DisassociateFleetInput{
+		FleetName: aws.String(d.Id()),
+		StackName: aws.String(d.Get("stack_name").(string)),
+	})
+	if err != nil {
+		return diag.FromErr(fmt.Errorf("error deleting Appstream Fleet (%s): %w", d.Id(), err))
+	}
+
+	_, err = conn.DeleteFleetWithContext(ctx, &appstream.DeleteFleetInput{
+		Name: aws.String(d.Id()),
 	})
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error deleting Appstream Fleet (%s): %w", d.Id(), err))
