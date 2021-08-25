@@ -19,6 +19,8 @@ const (
 	HostedZoneDnssecStatusTimeout = 5 * time.Minute
 
 	KeySigningKeyStatusTimeout = 5 * time.Minute
+
+	TrafficPolicyTimeout = 5 * time.Minute
 )
 
 func ChangeInfoStatusInsync(conn *route53.Route53, changeID string) (*route53.ChangeInfo, error) {
