@@ -15,7 +15,7 @@ import (
 func TestAccAWSRoute53TrafficPolicy_basic(t *testing.T) {
 	var output route53.TrafficPolicySummary
 	resourceName := "aws_route53_traffic_policy.test"
-	rName := acctest.RandomWithPrefix("")
+	rName := acctest.RandomWithPrefix("tf-acc-test")
 
 	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:          func() { testAccPreCheck(t) },
@@ -32,6 +32,7 @@ func TestAccAWSRoute53TrafficPolicy_basic(t *testing.T) {
 			},
 			{
 				ResourceName:      resourceName,
+				ImportStateIdFunc: testAccAWSRoute53TrafficPolicyImportStateIdFunc(resourceName),
 				ImportState:       true,
 				ImportStateVerify: true,
 			},
@@ -56,6 +57,7 @@ func TestAccAWSRoute53TrafficPolicy_disappears(t *testing.T) {
 					testAccCheckAwsRoute53TrafficPolicyExists(resourceName, &output),
 					testAccCheckResourceDisappears(testAccProvider, resourceAwsRoute53TrafficPolicy(), resourceName),
 				),
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -64,7 +66,7 @@ func TestAccAWSRoute53TrafficPolicy_disappears(t *testing.T) {
 func TestAccAWSRoute53TrafficPolicy_complete(t *testing.T) {
 	var output route53.TrafficPolicySummary
 	resourceName := "aws_route53_traffic_policy.test"
-	rName := acctest.RandomWithPrefix("")
+	rName := acctest.RandomWithPrefix("tf-acc-test")
 	comment := `comment`
 	commentUpdated := `comment updated`
 
@@ -92,6 +94,7 @@ func TestAccAWSRoute53TrafficPolicy_complete(t *testing.T) {
 			},
 			{
 				ResourceName:      resourceName,
+				ImportStateIdFunc: testAccAWSRoute53TrafficPolicyImportStateIdFunc(resourceName),
 				ImportState:       true,
 				ImportStateVerify: true,
 			},
@@ -108,19 +111,14 @@ func testAccCheckAwsRoute53TrafficPolicyExists(resourceName string, trafficPolic
 
 		conn := testAccProvider.Meta().(*AWSClient).r53conn
 
-		idTraffic, version, err := decodeTrafficPolicyID(rs.Primary.ID)
-		if err != nil {
-			return fmt.Errorf("error decoding Route53 Traffic Policy %s : %w", rs.Primary.Attributes["name"], err)
-		}
-
-		resp, err := getTrafficPolicyById(context.Background(), conn, idTraffic, version)
+		resp, err := getTrafficPolicyById(context.Background(), conn, rs.Primary.ID)
 
 		if err != nil {
 			return fmt.Errorf("problem checking for traffic policy existence: %w", err)
 		}
 
 		if resp == nil {
-			return fmt.Errorf("traffic policy %q does not exist", idTraffic)
+			return fmt.Errorf("traffic policy %q does not exist", rs.Primary.ID)
 		}
 
 		*trafficPolicy = *resp
@@ -137,16 +135,10 @@ func testAccCheckRoute53TrafficPolicyDestroy(s *terraform.State) error {
 			continue
 		}
 
-		idTraffic, version, err := decodeTrafficPolicyID(rs.Primary.ID)
-		if err != nil {
-			return fmt.Errorf("error decoding Route53 Traffic Policy %s : %w", rs.Primary.Attributes["name"], err)
-		}
-
-		if tfawserr.ErrCodeEquals(err, route53.ErrCodeNoSuchTrafficPolicy) {
+		resp, err := getTrafficPolicyById(context.Background(), conn, rs.Primary.ID)
+		if tfawserr.ErrCodeEquals(err, route53.ErrCodeNoSuchTrafficPolicy) || resp == nil {
 			continue
 		}
-
-		resp, err := getTrafficPolicyById(context.Background(), conn, idTraffic, version)
 
 		if err != nil {
 			return fmt.Errorf("error during check if traffic policy still exists, %#v", err)
@@ -156,6 +148,17 @@ func testAccCheckRoute53TrafficPolicyDestroy(s *terraform.State) error {
 		}
 	}
 	return nil
+}
+
+func testAccAWSRoute53TrafficPolicyImportStateIdFunc(resourceName string) resource.ImportStateIdFunc {
+	return func(s *terraform.State) (string, error) {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return "", fmt.Errorf("not found: %s", resourceName)
+		}
+
+		return fmt.Sprintf("%s/%s", rs.Primary.Attributes["id"], rs.Primary.Attributes["version"]), nil
+	}
 }
 
 func testAccRoute53TrafficPolicyConfig(name string) string {
