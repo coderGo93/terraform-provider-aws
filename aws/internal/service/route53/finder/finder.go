@@ -1,6 +1,7 @@
 package finder
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -61,4 +62,17 @@ func KeySigningKeyByResourceID(conn *route53.Route53, resourceID string) (*route
 	}
 
 	return KeySigningKey(conn, hostedZoneID, name)
+}
+
+func TrafficPolicyInstanceID(ctx context.Context, conn *route53.Route53, id string) (*route53.GetTrafficPolicyInstanceOutput, error) {
+	input := &route53.GetTrafficPolicyInstanceInput{
+		Id: aws.String(id),
+	}
+
+	resp, err := conn.GetTrafficPolicyInstanceWithContext(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }

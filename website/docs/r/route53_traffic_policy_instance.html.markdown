@@ -12,7 +12,7 @@ Provides a Route53 traffic policy instance resource.
 
 ## Example Usage
 
-```hcl
+```terraform
 resource "aws_route53_traffic_policy_instance" "test" {
   name                   = "test.example.com"
   traffic_policy_id      = "b3gb108f-ea6f-45a5-baab-9d112d8b4037"
@@ -37,6 +37,8 @@ The following arguments are required:
 In addition to all arguments above, the following attributes are exported:
 
 * `id` - ID of traffic policy instance.
+* `message` - If `state` is `Failed`, an explanation of the reason for the failure. If `state` is another value, `message` is empty. .
+* `state` - State of a policy traffic instance.
 
 ## Import
 

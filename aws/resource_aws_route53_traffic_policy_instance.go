@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/route53"
@@ -32,11 +33,23 @@ func resourceAwsRoute53TrafficPolicyInstance() *schema.Resource {
 				ForceNew:     true,
 				ValidateFunc: validation.StringLenBetween(1, 32),
 			},
+			"message": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
 			"name": {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
 				ValidateFunc: validation.StringLenBetween(1, 1024),
+				StateFunc: func(v interface{}) string {
+					value := strings.TrimSuffix(v.(string), ".")
+					return strings.ToLower(value)
+				},
+			},
+			"state": {
+				Type:     schema.TypeString,
+				Computed: true,
 			},
 			"traffic_policy_id": {
 				Type:         schema.TypeString,
@@ -90,6 +103,10 @@ func resourceAwsRoute53TrafficPolicyInstanceCreate(ctx context.Context, d *schem
 		return diag.FromErr(fmt.Errorf("error creating Route53 Traffic Policy Instance %s: %w", d.Get("name").(string), err))
 	}
 
+	if _, err = waiter.TrafficPolicyInstanceStateApplied(ctx, conn, aws.StringValue(output.TrafficPolicyInstance.Id)); err != nil {
+		return diag.FromErr(fmt.Errorf("error waiting for Route53 Traffic Policy Instance (%s) to be Applied: %w", d.Id(), err))
+	}
+
 	d.SetId(aws.StringValue(output.TrafficPolicyInstance.Id))
 
 	return resourceAwsRoute53TrafficPolicyInstanceRead(ctx, d, meta)
@@ -115,7 +132,9 @@ func resourceAwsRoute53TrafficPolicyInstanceRead(ctx context.Context, d *schema.
 	}
 
 	d.Set("hosted_zone_id", output.TrafficPolicyInstance.HostedZoneId)
-	d.Set("name", output.TrafficPolicyInstance.Name)
+	d.Set("message", output.TrafficPolicyInstance.Message)
+	d.Set("name", strings.TrimSuffix(aws.StringValue(output.TrafficPolicyInstance.Name), "."))
+	d.Set("state", output.TrafficPolicyInstance.State)
 	d.Set("traffic_policy_id", output.TrafficPolicyInstance.TrafficPolicyId)
 	d.Set("traffic_policy_version", output.TrafficPolicyInstance.TrafficPolicyVersion)
 	d.Set("ttl", output.TrafficPolicyInstance.TTL)
@@ -153,8 +172,14 @@ func resourceAwsRoute53TrafficPolicyInstanceDelete(ctx context.Context, d *schem
 		if tfawserr.ErrCodeEquals(err, route53.ErrCodeNoSuchTrafficPolicyInstance) {
 			return nil
 		}
-
 		return diag.FromErr(fmt.Errorf("error deleting Route53 Traffic Policy Instance %s: %w", d.Get("name").(string), err))
+	}
+
+	if _, err = waiter.TrafficPolicyInstanceStateDeleted(ctx, conn, d.Id()); err != nil {
+		if tfawserr.ErrCodeEquals(err, route53.ErrCodeNoSuchTrafficPolicyInstance) {
+			return nil
+		}
+		return diag.FromErr(fmt.Errorf("error waiting for Route53 Traffic Policy Instance (%s) to be Deleted: %w", d.Id(), err))
 	}
 
 	return nil
