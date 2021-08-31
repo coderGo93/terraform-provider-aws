@@ -1008,6 +1008,7 @@ func Provider() *schema.Provider {
 			"aws_route53_resolver_rule_association":                   resourceAwsRoute53ResolverRuleAssociation(),
 			"aws_route53_resolver_rule":                               resourceAwsRoute53ResolverRule(),
 			"aws_route53_traffic_policy":                              resourceAwsRoute53TrafficPolicy(),
+			"aws_route53_traffic_policy_instance":                     resourceAwsRoute53TrafficPolicyInstance(),
 			"aws_route53recoverycontrolconfig_cluster":                resourceAwsRoute53RecoveryControlConfigCluster(),
 			"aws_route53recoverycontrolconfig_control_panel":          resourceAwsRoute53RecoveryControlConfigControlPanel(),
 			"aws_route53recoverycontrolconfig_routing_control":        resourceAwsRoute53RecoveryControlConfigRoutingControl(),
