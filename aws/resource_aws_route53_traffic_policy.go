@@ -3,17 +3,18 @@ package aws
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/route53"
+	"github.com/hashicorp/aws-sdk-go-base/tfawserr"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/terraform-providers/terraform-provider-aws/aws/internal/service/route53/waiter"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/route53"
 )
 
 func resourceAwsRoute53TrafficPolicy() *schema.Resource {
@@ -71,8 +72,11 @@ func resourceAwsRoute53TrafficPolicyCreate(ctx context.Context, d *schema.Resour
 	var output *route53.CreateTrafficPolicyOutput
 	err = resource.RetryContext(ctx, waiter.TrafficPolicyTimeout, func() *resource.RetryError {
 		output, err = conn.CreateTrafficPolicyWithContext(ctx, input)
-
 		if err != nil {
+			if tfawserr.ErrCodeEquals(err, route53.ErrCodeNoSuchTrafficPolicy) {
+				resource.RetryableError(err)
+			}
+
 			return resource.NonRetryableError(err)
 		}
 
@@ -106,6 +110,12 @@ func resourceAwsRoute53TrafficPolicyRead(ctx context.Context, d *schema.Resource
 	}
 
 	response, err := conn.GetTrafficPolicy(request)
+
+	if !d.IsNewResource() && tfawserr.ErrCodeEquals(err, route53.ErrCodeNoSuchTrafficPolicy) {
+		log.Printf("[WARN] Route53 Traffic Policy (%s) not found, removing from state", d.Id())
+		d.SetId("")
+	}
+
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error getting Route53 Traffic Policy %s, version %d: %w", d.Get("name").(string), d.Get("latest_version").(int), err))
 	}
@@ -146,48 +156,28 @@ func resourceAwsRoute53TrafficPolicyUpdate(ctx context.Context, d *schema.Resour
 func resourceAwsRoute53TrafficPolicyDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	conn := meta.(*AWSClient).r53conn
 
-	var versionMarker *string
-
-	var trafficPolicies []*route53.TrafficPolicy
-
-	for allPoliciesListed := false; !allPoliciesListed; {
-		listRequest := &route53.ListTrafficPolicyVersionsInput{
-			Id: aws.String(d.Id()),
-		}
-		if versionMarker != nil {
-			listRequest.TrafficPolicyVersionMarker = versionMarker
-		}
-
-		listResponse, err := conn.ListTrafficPolicyVersions(listRequest)
-		if err != nil {
-			return diag.FromErr(fmt.Errorf("error listing Route 53 Traffic Policy versions: %v", err))
-		}
-
-		trafficPolicies = append(trafficPolicies, listResponse.TrafficPolicies...)
-
-		if *listResponse.IsTruncated {
-			versionMarker = listResponse.TrafficPolicyVersionMarker
-		} else {
-			allPoliciesListed = true
-		}
+	idTraffic, version, err := decodeTrafficPolicyID(d.Id())
+	if err != nil {
+		return diag.FromErr(fmt.Errorf("error decoding Route53 Traffic Policy %s : %w", d.Get("name").(string), err))
 	}
 
-	for _, trafficPolicy := range trafficPolicies {
-		deleteRequest := &route53.DeleteTrafficPolicyInput{
-			Id:      trafficPolicy.Id,
-			Version: trafficPolicy.Version,
-		}
+	input := &route53.DeleteTrafficPolicyInput{
+		Id:      aws.String(idTraffic),
+		Version: aws.Int64(version),
+	}
 
-		_, err := conn.DeleteTrafficPolicy(deleteRequest)
-		if err != nil {
-			return diag.FromErr(fmt.Errorf("error deleting Route53 Traffic Policy %s, version %d: %s", *trafficPolicy.Id, *trafficPolicy.Version, err))
+	_, err = conn.DeleteTrafficPolicyWithContext(ctx, input)
+	if err != nil {
+		if tfawserr.ErrCodeEquals(err, route53.ErrCodeNoSuchTrafficPolicy) {
+			return nil
 		}
+		return diag.FromErr(fmt.Errorf("error deleting Route53 Traffic Policy %s, version %d: %s", idTraffic, version, err))
 	}
 
 	return nil
 }
 
-func getTrafficPolicyById(ctx context.Context, conn *route53.Route53, trafficPolicyId string) (*route53.TrafficPolicySummary, error) {
+func getTrafficPolicyById(ctx context.Context, conn *route53.Route53, trafficPolicyId string, version int64) (*route53.TrafficPolicySummary, error) {
 	var idMarker *string
 
 	for allPoliciesListed := false; !allPoliciesListed; {
@@ -199,11 +189,11 @@ func getTrafficPolicyById(ctx context.Context, conn *route53.Route53, trafficPol
 
 		listResponse, err := conn.ListTrafficPoliciesWithContext(ctx, input)
 		if err != nil {
-			return nil, fmt.Errorf("error listing Route 53 Traffic Policies: %w", err)
+			return nil, err
 		}
 
 		for _, summary := range listResponse.TrafficPolicySummaries {
-			if aws.StringValue(summary.Id) == trafficPolicyId {
+			if aws.StringValue(summary.Id) == trafficPolicyId && aws.Int64Value(summary.LatestVersion) == version {
 				return summary, nil
 			}
 		}
