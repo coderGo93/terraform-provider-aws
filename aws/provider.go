@@ -388,6 +388,7 @@ func Provider() *schema.Provider {
 			"aws_route53_resolver_endpoint":                  dataSourceAwsRoute53ResolverEndpoint(),
 			"aws_route53_resolver_rule":                      dataSourceAwsRoute53ResolverRule(),
 			"aws_route53_resolver_rules":                     dataSourceAwsRoute53ResolverRules(),
+			"aws_route53_traffic_policy_document":            dataSourceAwsRoute53TrafficPolicyDocument(),
 			"aws_route53_zone":                               dataSourceAwsRoute53Zone(),
 			"aws_s3_bucket":                                  dataSourceAwsS3Bucket(),
 			"aws_s3_bucket_object":                           dataSourceAwsS3BucketObject(),

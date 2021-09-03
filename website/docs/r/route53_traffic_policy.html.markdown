@@ -13,22 +13,41 @@ Manages a Route53 Traffic Policy.
 ## Example Usage
 
 ```terraform
+data "aws_region" "current" {}
+
+data "aws_route53_traffic_policy_document" "example" {
+  record_type = "A"
+  start_rule  = "site_switch"
+
+  endpoint {
+    id    = "my_elb"
+    type  = "elastic-load-balancer"
+    value = "elb-111111.${data.aws_region.current.name}.amazonaws.com"
+  }
+  endpoint {
+    id     = "site_down_banner"
+    type   = "s3-website"
+    region = data.aws_region.current.name
+    value  = "www.example.com"
+  }
+
+  rule {
+    id   = "site_switch"
+    type = "failover"
+
+    primary {
+      endpoint_reference = "my_elb"
+    }
+    secondary {
+      endpoint_reference = "site_down_banner"
+    }
+  }
+}
+
 resource "aws_route53_traffic_policy" "example" {
   name     = "example"
   comment  = "example comment"
-  document = <<EOF
-{
-  "AWSPolicyFormatVersion": "2015-10-01",
-  "RecordType": "A",
-  "Endpoints": {
-    "endpoint-start-NkPh": {
-      "Type": "value",
-      "Value": "10.0.0.2"
-    }
-  },
-  "StartEndpoint": "endpoint-start-NkPh"
-}
-EOF
+  document = data.aws_route53_traffic_policy_document.example.json
 }
 ```
 
