@@ -1,6 +1,8 @@
 package waiter
 
 import (
+	"context"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
@@ -56,5 +58,22 @@ func KeySigningKeyStatus(conn *route53.Route53, hostedZoneID string, name string
 		}
 
 		return keySigningKey, aws.StringValue(keySigningKey.Status), nil
+	}
+}
+
+//TrafficPolicyInstanceState fetches the traffic policy instance and its state
+func TrafficPolicyInstanceState(ctx context.Context, conn *route53.Route53, id string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := finder.TrafficPolicyInstanceID(ctx, conn, id)
+
+		if err != nil {
+			return nil, "Unknown", err
+		}
+
+		if object == nil && object.TrafficPolicyInstance == nil {
+			return object, "NotFound", nil
+		}
+
+		return object, aws.StringValue(object.TrafficPolicyInstance.State), nil
 	}
 }
