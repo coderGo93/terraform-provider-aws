@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	DirectoryCreatedTimeout = 60 * time.Minute
-	DirectoryDeletedTimeout = 60 * time.Minute
+	DirectoryCreatedTimeout        = 60 * time.Minute
+	DirectoryDeletedTimeout        = 60 * time.Minute
+	ShareDirectoryOperationTimeout = 4 * time.Minute
 )
 
 func DirectoryCreated(conn *directoryservice.DirectoryService, id string) (*directoryservice.DirectoryDescription, error) {
