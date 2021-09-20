@@ -37,6 +37,7 @@ Cognito
 Config
 Connect
 Cost and Usage Report
+CostExplorer
 Data Lifecycle Manager (DLM)
 DataPipeline
 DataSync
