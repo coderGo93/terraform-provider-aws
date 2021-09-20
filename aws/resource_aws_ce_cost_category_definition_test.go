@@ -39,6 +39,74 @@ func TestAccAwsCECostCategoryDefinition_basic(t *testing.T) {
 	})
 }
 
+func TestAccAwsCECostCategoryDefinition_complete(t *testing.T) {
+	var output costexplorer.CostCategory
+	resourceName := "aws_ce_cost_category_definition.test"
+	rName := acctest.RandomWithPrefix("tf-acc-test")
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:          func() { testAccPreCheck(t) },
+		ProviderFactories: testAccProviderFactories,
+		CheckDestroy:      testAccCheckAwsCECostCategoryDefinitionDestroy,
+		ErrorCheck:        testAccErrorCheck(t, costexplorer.EndpointsID),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAwsCECostCategoryDefinitionConfig(rName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAwsCECostCategoryDefinitionExists(resourceName, &output),
+					resource.TestCheckResourceAttr(resourceName, "name", rName),
+				),
+			},
+			{
+				Config: testAccAwsCECostCategoryDefinitionOperandAndConfig(rName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAwsCECostCategoryDefinitionExists(resourceName, &output),
+					resource.TestCheckResourceAttr(resourceName, "name", rName),
+				),
+			},
+			{
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccAwsCECostCategoryDefinition_splitCharge(t *testing.T) {
+	var output costexplorer.CostCategory
+	resourceName := "aws_ce_cost_category_definition.test"
+	rName := acctest.RandomWithPrefix("tf-acc-test")
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:          func() { testAccPreCheck(t) },
+		ProviderFactories: testAccProviderFactories,
+		CheckDestroy:      testAccCheckAwsCECostCategoryDefinitionDestroy,
+		ErrorCheck:        testAccErrorCheck(t, costexplorer.EndpointsID),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAwsCECostCategoryDefinitionSplitChargesConfig(rName, "PROPORTIONAL"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAwsCECostCategoryDefinitionExists(resourceName, &output),
+					resource.TestCheckResourceAttr(resourceName, "name", rName),
+				),
+			},
+			{
+				Config: testAccAwsCECostCategoryDefinitionSplitChargesConfig(rName, "EVEN"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAwsCECostCategoryDefinitionExists(resourceName, &output),
+					resource.TestCheckResourceAttr(resourceName, "name", rName),
+				),
+			},
+			{
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
 func TestAccAwsCECostCategoryDefinition_disappears(t *testing.T) {
 	var output costexplorer.CostCategory
 	resourceName := "aws_ce_cost_category_definition.test"
@@ -127,6 +195,7 @@ resource "aws_ce_cost_category_definition" "test" {
         match_options = ["ENDS_WITH"]
       }
     }
+    type = "REGULAR"
   }
   rule {
     value = "staging"
@@ -137,6 +206,7 @@ resource "aws_ce_cost_category_definition" "test" {
         match_options = ["ENDS_WITH"]
       }
     }
+    type = "REGULAR"
   }
   rule {
     value = "testing"
@@ -147,7 +217,140 @@ resource "aws_ce_cost_category_definition" "test" {
         match_options = ["ENDS_WITH"]
       }
     }
+    type = "REGULAR"
   }
 }
 `, name)
+}
+
+func testAccAwsCECostCategoryDefinitionOperandAndConfig(name string) string {
+	return fmt.Sprintf(`
+resource "aws_ce_cost_category_definition" "test" {
+  name         = %[1]q
+  rule_version = "CostCategoryExpression.v1"
+  rule {
+    value = "production"
+    rule {
+      and {
+        dimension {
+          key           = "LINKED_ACCOUNT_NAME"
+          values        = ["-prod"]
+          match_options = ["ENDS_WITH"]
+        }
+      }
+      and {
+        dimension {
+          key           = "LINKED_ACCOUNT_NAME"
+          values        = ["-stg"]
+          match_options = ["ENDS_WITH"]
+        }
+      }
+      and {
+        dimension {
+          key           = "LINKED_ACCOUNT_NAME"
+          values        = ["-dev"]
+          match_options = ["ENDS_WITH"]
+        }
+      }
+    }
+    type = "REGULAR"
+  }
+}
+`, name)
+}
+
+func testAccAwsCECostCategoryDefinitionSplitChargesConfig(name, method string) string {
+	return fmt.Sprintf(`
+
+resource "aws_ce_cost_category_definition" "test1" {
+  name         = "%[1]s-1"
+  rule_version = "CostCategoryExpression.v1"
+  rule {
+    value = "production"
+    rule {
+      dimension {
+        key           = "LINKED_ACCOUNT_NAME"
+        values        = ["-prod"]
+        match_options = ["ENDS_WITH"]
+      }
+    }
+    type = "REGULAR"
+  }
+  rule {
+    value = "staging"
+    rule {
+      dimension {
+        key           = "LINKED_ACCOUNT_NAME"
+        values        = ["-stg"]
+        match_options = ["ENDS_WITH"]
+      }
+    }
+    type = "REGULAR"
+  }
+  rule {
+    value = "testing"
+    rule {
+      dimension {
+        key           = "LINKED_ACCOUNT_NAME"
+        values        = ["-dev"]
+        match_options = ["ENDS_WITH"]
+      }
+    }
+    type = "REGULAR"
+  }
+}
+
+resource "aws_ce_cost_category_definition" "test2" {
+  name         = "%[1]s-2"
+  rule_version = "CostCategoryExpression.v1"
+  rule {
+    value = "production"
+    rule {
+      and {
+        dimension {
+          key           = "LINKED_ACCOUNT_NAME"
+          values        = ["-prod"]
+          match_options = ["ENDS_WITH"]
+        }
+      }
+      and {
+        dimension {
+          key           = "LINKED_ACCOUNT_NAME"
+          values        = ["-stg"]
+          match_options = ["ENDS_WITH"]
+        }
+      }
+      and {
+        dimension {
+          key           = "LINKED_ACCOUNT_NAME"
+          values        = ["-dev"]
+          match_options = ["ENDS_WITH"]
+        }
+      }
+    }
+    type = "REGULAR"
+  }
+}
+
+resource "aws_ce_cost_category_definition" "test" {
+  name         = %[1]q
+  rule_version = "CostCategoryExpression.v1"
+  rule {
+    value = "production"
+    rule {
+      dimension {
+        key           = "LINKED_ACCOUNT_NAME"
+        values        = ["-prod"]
+        match_options = ["ENDS_WITH"]
+      }
+    }
+    type = "REGULAR"
+  }
+  split_charge_rule {
+    method  = %[2]q
+    source  = aws_ce_cost_category_definition.test1.id
+    targets = [aws_ce_cost_category_definition.test2.id]
+  }
+}
+`, name, method)
 }
