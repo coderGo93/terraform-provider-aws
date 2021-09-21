@@ -21,13 +21,14 @@ resource "aws_ce_anomaly_monitor" "example" {
 resource "aws_ce_anomaly_monitor" "example" {
   subscription_name = "EXAMPLE ANOMALY SUBSCRIPTION"
   threshold         = 0
-  frequency         = "IMMEDIATE"
+  frequency         = "DAILY"
   monitor_arn_list = [
     aws_ce_anomaly_monitor.test.id,
   ]
   subscriber {
     type    = "EMAIL"
     address = "abc@example.com"
+    status  = "CONFIRMED"
   }
 }
 ```

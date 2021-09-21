@@ -57,7 +57,6 @@ func TestAccAwsCEAnomalySubscription_disappears(t *testing.T) {
 					testAccCheckAwsCEAnomalySubscriptionExists(resourceName, &output),
 					testAccCheckResourceDisappears(testAccProvider, resourceAwsCEAnomalySubscription(), resourceName),
 				),
-				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -97,7 +96,8 @@ func testAccCheckAwsCEAnomalySubscriptionDestroy(s *terraform.State) error {
 
 		resp, err := conn.GetAnomalySubscriptionsWithContext(context.Background(), &costexplorer.GetAnomalySubscriptionsInput{SubscriptionArnList: []*string{aws.String(rs.Primary.ID)}})
 
-		if tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) {
+		if tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) ||
+			tfawserr.ErrMessageContains(err, costexplorer.ErrCodeUnknownSubscriptionException, "No anomaly subscription") {
 			continue
 		}
 
@@ -125,13 +125,14 @@ resource "aws_ce_anomaly_monitor" "test" {
 resource "aws_ce_anomaly_subscription" "test" {
   subscription_name = %[1]q
   threshold         = 0
-  frequency         = "IMMEDIATE"
+  frequency         = "DAILY"
   monitor_arn_list = [
     aws_ce_anomaly_monitor.test.id,
   ]
   subscriber {
     type    = "EMAIL"
     address = "abc@example.com"
+    status  = "CONFIRMED"
   }
 }
 `, name)

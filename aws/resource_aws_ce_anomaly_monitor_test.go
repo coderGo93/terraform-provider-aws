@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
-func TestAccAwsCEAnomalyMonitor_basic(t *testing.T) {
+func testAccAwsCEAnomalyMonitor_basic(t *testing.T) {
 	var output costexplorer.AnomalyMonitor
 	resourceName := "aws_ce_anomaly_monitor.test"
 	rName := acctest.RandomWithPrefix("tf-acc-test")
@@ -40,7 +40,7 @@ func TestAccAwsCEAnomalyMonitor_basic(t *testing.T) {
 	})
 }
 
-func TestAccAwsCEAnomalyMonitor_disappears(t *testing.T) {
+func testAccAwsCEAnomalyMonitor_disappears(t *testing.T) {
 	var output costexplorer.AnomalyMonitor
 	resourceName := "aws_ce_anomaly_monitor.test"
 	rName := acctest.RandomWithPrefix("tf-acc-test")
@@ -57,7 +57,6 @@ func TestAccAwsCEAnomalyMonitor_disappears(t *testing.T) {
 					testAccCheckAwsCEAnomalyMonitorExists(resourceName, &output),
 					testAccCheckResourceDisappears(testAccProvider, resourceAwsCEAnomalyMonitor(), resourceName),
 				),
-				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -97,7 +96,8 @@ func testAccCheckAwsCEAnomalyMonitorDestroy(s *terraform.State) error {
 
 		resp, err := conn.GetAnomalyMonitorsWithContext(context.Background(), &costexplorer.GetAnomalyMonitorsInput{MonitorArnList: []*string{aws.String(rs.Primary.ID)}})
 
-		if tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) {
+		if tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) ||
+			tfawserr.ErrMessageContains(err, costexplorer.ErrCodeUnknownMonitorException, "No monitor present") {
 			continue
 		}
 

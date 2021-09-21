@@ -70,6 +70,124 @@ func resourceAwsCEAnomalyMonitor() *schema.Resource {
 func schemaAWSCECostCategoryRule() *schema.Resource {
 	return &schema.Resource{
 		Schema: map[string]*schema.Schema{
+			"and": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem:     schemaAWSCECostCategoryRuleExpression(),
+			},
+			"cost_category": {
+				Type:     schema.TypeList,
+				MaxItems: 1,
+				Optional: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"key": {
+							Type:         schema.TypeString,
+							Optional:     true,
+							ValidateFunc: validation.StringLenBetween(1, 50),
+						},
+						"match_options": {
+							Type:     schema.TypeSet,
+							Optional: true,
+							Elem: &schema.Schema{
+								Type:         schema.TypeString,
+								ValidateFunc: validation.StringInSlice(costexplorer.MatchOption_Values(), false),
+							},
+							Set: schema.HashString,
+						},
+						"values": {
+							Type:     schema.TypeSet,
+							Optional: true,
+							Elem: &schema.Schema{
+								Type:         schema.TypeString,
+								ValidateFunc: validation.StringLenBetween(0, 1024),
+							},
+							Set: schema.HashString,
+						},
+					},
+				},
+			},
+			"dimension": {
+				Type:     schema.TypeList,
+				MaxItems: 1,
+				Optional: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"key": {
+							Type:         schema.TypeString,
+							Optional:     true,
+							ValidateFunc: validation.StringInSlice(costexplorer.Dimension_Values(), false),
+						},
+						"match_options": {
+							Type:     schema.TypeSet,
+							Optional: true,
+							Elem: &schema.Schema{
+								Type:         schema.TypeString,
+								ValidateFunc: validation.StringInSlice(costexplorer.MatchOption_Values(), false),
+							},
+							Set: schema.HashString,
+						},
+						"values": {
+							Type:     schema.TypeSet,
+							Optional: true,
+							Elem: &schema.Schema{
+								Type:         schema.TypeString,
+								ValidateFunc: validation.StringLenBetween(0, 1024),
+							},
+							Set: schema.HashString,
+						},
+					},
+				},
+			},
+			"not": {
+				Type:     schema.TypeList,
+				MaxItems: 1,
+				Optional: true,
+				Elem:     schemaAWSCECostCategoryRuleExpression(),
+			},
+			"or": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem:     schemaAWSCECostCategoryRuleExpression(),
+			},
+			"tags": {
+				Type:     schema.TypeList,
+				MaxItems: 1,
+				Optional: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"key": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+						"match_options": {
+							Type:     schema.TypeSet,
+							Optional: true,
+							Elem: &schema.Schema{
+								Type:         schema.TypeString,
+								ValidateFunc: validation.StringInSlice(costexplorer.MatchOption_Values(), false),
+							},
+							Set: schema.HashString,
+						},
+						"values": {
+							Type:     schema.TypeSet,
+							Optional: true,
+							Elem: &schema.Schema{
+								Type:         schema.TypeString,
+								ValidateFunc: validation.StringLenBetween(0, 1024),
+							},
+							Set: schema.HashString,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schemaAWSCECostCategoryRuleExpression() *schema.Resource {
+	return &schema.Resource{
+		Schema: map[string]*schema.Schema{
 			"cost_category": {
 				Type:     schema.TypeList,
 				MaxItems: 1,
@@ -219,7 +337,8 @@ func resourceAwsCEAnomalyMonitorRead(ctx context.Context, d *schema.ResourceData
 	conn := meta.(*AWSClient).costexplorerconn
 
 	resp, err := conn.GetAnomalyMonitorsWithContext(ctx, &costexplorer.GetAnomalyMonitorsInput{MonitorArnList: []*string{aws.String(d.Id())}})
-	if !d.IsNewResource() && tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) {
+	if tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) ||
+		tfawserr.ErrMessageContains(err, costexplorer.ErrCodeUnknownMonitorException, "No monitor present") {
 		log.Printf("[WARN] CE Anomaly Monitor (%s) not found, removing from state", d.Id())
 		d.SetId("")
 		return nil
@@ -235,7 +354,7 @@ func resourceAwsCEAnomalyMonitorRead(ctx context.Context, d *schema.ResourceData
 		d.Set("last_updated_date", v.LastUpdatedDate)
 		d.Set("monitor_dimension", v.MonitorDimension)
 		d.Set("monitor_name", v.MonitorName)
-		if err = d.Set("monitor_specification", flattenCECostCategoryRuleExpression(v.MonitorSpecification)); err != nil {
+		if err = d.Set("monitor_specification", flattenCECostCategoryRuleExpressions([]*costexplorer.Expression{v.MonitorSpecification})); err != nil {
 			return diag.FromErr(fmt.Errorf("error setting `%s` for CE Anomaly Monitor (%s): %w", "monitor_specification", d.Id(), err))
 		}
 		d.Set("monitor_type", v.MonitorType)
@@ -271,7 +390,8 @@ func resourceAwsCEAnomalyMonitorDelete(ctx context.Context, d *schema.ResourceDa
 		MonitorArn: aws.String(d.Id()),
 	})
 	if err != nil {
-		if tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) {
+		if tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) ||
+			tfawserr.ErrMessageContains(err, costexplorer.ErrCodeUnknownMonitorException, "No monitor present") {
 			return nil
 		}
 		return diag.FromErr(fmt.Errorf("error deleting CE Anomaly Monitor (%s): %w", d.Id(), err))
@@ -285,11 +405,20 @@ func expandCECostExpression(tfMap map[string]interface{}) *costexplorer.Expressi
 	}
 
 	apiObject := &costexplorer.Expression{}
+	if v, ok := tfMap["and"]; ok {
+		apiObject.And = expandCECostExpressions(v.(*schema.Set).List())
+	}
 	if v, ok := tfMap["cost_category"]; ok {
 		apiObject.CostCategories = expandCECostExpressionCostCategory(v.([]interface{}))
 	}
 	if v, ok := tfMap["dimension"]; ok {
 		apiObject.Dimensions = expandCECostExpressionDimension(v.([]interface{}))
+	}
+	if v, ok := tfMap["not"]; ok && len(v.([]interface{})) > 0 {
+		apiObject.Not = expandCECostExpressions(v.([]interface{}))[0]
+	}
+	if v, ok := tfMap["or"]; ok {
+		apiObject.Or = expandCECostExpressions(v.(*schema.Set).List())
 	}
 	if v, ok := tfMap["tags"]; ok {
 		apiObject.Tags = expandCECostExpressionTag(v.([]interface{}))
@@ -389,8 +518,11 @@ func flattenCECostCategoryRuleExpression(apiObject *costexplorer.Expression) map
 	}
 
 	tfMap := map[string]interface{}{}
+	tfMap["and"] = flattenCECostCategoryRuleOperandExpressions(apiObject.And)
 	tfMap["cost_category"] = flattenCECostCategoryRuleExpressionCostCategory(apiObject.CostCategories)
 	tfMap["dimension"] = flattenCECostCategoryRuleExpressionDimension(apiObject.Dimensions)
+	tfMap["not"] = flattenCECostCategoryRuleOperandExpressions([]*costexplorer.Expression{apiObject.Not})
+	tfMap["or"] = flattenCECostCategoryRuleOperandExpressions(apiObject.Or)
 	tfMap["tags"] = flattenCECostCategoryRuleExpressionTag(apiObject.Tags)
 
 	return tfMap
@@ -443,6 +575,55 @@ func flattenCECostCategoryRuleExpressionTag(apiObject *costexplorer.TagValues) [
 	tfMap["values"] = flattenStringList(apiObject.Values)
 
 	tfList = append(tfList, tfMap)
+
+	return tfList
+}
+
+func flattenCECostCategoryRuleExpressions(apiObjects []*costexplorer.Expression) []map[string]interface{} {
+	if len(apiObjects) == 0 {
+		return nil
+	}
+
+	var tfList []map[string]interface{}
+
+	for _, apiObject := range apiObjects {
+		if apiObject == nil {
+			continue
+		}
+
+		tfList = append(tfList, flattenCECostCategoryRuleExpression(apiObject))
+	}
+
+	return tfList
+}
+
+func flattenCECostCategoryRuleOperandExpression(apiObject *costexplorer.Expression) map[string]interface{} {
+	if apiObject == nil {
+		return nil
+	}
+
+	tfMap := map[string]interface{}{}
+	tfMap["cost_category"] = flattenCECostCategoryRuleExpressionCostCategory(apiObject.CostCategories)
+	tfMap["dimension"] = flattenCECostCategoryRuleExpressionDimension(apiObject.Dimensions)
+	tfMap["tags"] = flattenCECostCategoryRuleExpressionTag(apiObject.Tags)
+
+	return tfMap
+}
+
+func flattenCECostCategoryRuleOperandExpressions(apiObjects []*costexplorer.Expression) []map[string]interface{} {
+	if len(apiObjects) == 0 {
+		return nil
+	}
+
+	var tfList []map[string]interface{}
+
+	for _, apiObject := range apiObjects {
+		if apiObject == nil {
+			continue
+		}
+
+		tfList = append(tfList, flattenCECostCategoryRuleOperandExpression(apiObject))
+	}
 
 	return tfList
 }

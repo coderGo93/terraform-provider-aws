@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
+	"github.com/terraform-providers/terraform-provider-aws/aws/internal/hashcode"
 	"github.com/terraform-providers/terraform-provider-aws/aws/internal/service/costexplorer/waiter"
 )
 
@@ -61,7 +63,7 @@ func resourceAwsCEAnomalySubscription() *schema.Resource {
 						},
 					},
 				},
-				Set: schema.HashString,
+				Set: ceAnomalySubscriptionSubscriber,
 			},
 			"subscription_name": {
 				Type:         schema.TypeString,
@@ -123,7 +125,8 @@ func resourceAwsCEAnomalySuscriptionRead(ctx context.Context, d *schema.Resource
 	conn := meta.(*AWSClient).costexplorerconn
 
 	resp, err := conn.GetAnomalySubscriptionsWithContext(ctx, &costexplorer.GetAnomalySubscriptionsInput{SubscriptionArnList: []*string{aws.String(d.Id())}})
-	if !d.IsNewResource() && tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) {
+	if tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) ||
+		tfawserr.ErrMessageContains(err, costexplorer.ErrCodeUnknownSubscriptionException, "No anomaly subscription") {
 		log.Printf("[WARN] CE Anomaly Subscription (%s) not found, removing from state", d.Id())
 		d.SetId("")
 		return nil
@@ -185,7 +188,8 @@ func resourceAwsCEAnomalySuscriptionDelete(ctx context.Context, d *schema.Resour
 		SubscriptionArn: aws.String(d.Id()),
 	})
 	if err != nil {
-		if tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) {
+		if tfawserr.ErrCodeEquals(err, costexplorer.ErrCodeResourceNotFoundException) ||
+			tfawserr.ErrMessageContains(err, costexplorer.ErrCodeUnknownSubscriptionException, "No anomaly subscription") {
 			return nil
 		}
 		return diag.FromErr(fmt.Errorf("error deleting CE Anomaly Subscription (%s): %w", d.Id(), err))
@@ -242,6 +246,7 @@ func flattenCEAnomalySubscriptionSubscriber(apiObject *costexplorer.Subscriber) 
 	}
 
 	tfMap := map[string]interface{}{}
+
 	tfMap["address"] = aws.StringValue(apiObject.Address)
 	tfMap["type"] = aws.StringValue(apiObject.Type)
 	tfMap["status"] = aws.StringValue(apiObject.Status)
@@ -265,4 +270,13 @@ func flattenCEAnomalySubscriptionSubscribers(apiObjects []*costexplorer.Subscrib
 	}
 
 	return tfList
+}
+
+func ceAnomalySubscriptionSubscriber(v interface{}) int {
+	var buf bytes.Buffer
+	m := v.(map[string]interface{})
+	buf.WriteString(m["address"].(string))
+	buf.WriteString(m["status"].(string))
+	buf.WriteString(m["type"].(string))
+	return hashcode.String(buf.String())
 }
