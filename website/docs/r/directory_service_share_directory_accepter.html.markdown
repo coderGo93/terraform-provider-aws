@@ -51,7 +51,7 @@ resource "aws_directory_service_directory" "test" {
 resource "aws_directory_service_share_directory" "example" {
   provider = "awsalternate"
   directory_id = aws_directory_service_directory.test.id
-  share_method = "ORGANIZATIONS"
+  share_method = "HANDSHAKE"
   share_notes  = "Terraform testing"
 
   share_target {

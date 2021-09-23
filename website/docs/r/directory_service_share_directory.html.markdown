@@ -52,7 +52,6 @@ resource "aws_directory_service_share_directory" "example" {
   provider = "awsalternate"
   directory_id = aws_directory_service_directory.test.id
   share_method = "ORGANIZATIONS"
-  share_notes  = "Terraform testing"
 
   share_target {
     id   = data.aws_caller_identity.member.account_id
@@ -67,8 +66,11 @@ The following arguments are required:
 
 * `directory_id` - (Required) Identifier of the AWS Managed Microsoft AD directory that you want to share with other AWS accounts.
 * `share_method` - (Required) The method used when sharing a directory to determine whether the directory should be shared within your AWS organization (`ORGANIZATIONS`) or with any AWS account by sending a directory sharing request (`HANDSHAKE`). Valid values `ORGANIZATIONS` , `HANDSHAKE`
-* `share_notes` - (Required) A directory share request that is sent by the directory owner to the directory consumer.
 * `share_target` - (Required) Configuration block for the directory consumer account with whom the directory is to be shared. See below.
+
+The following arguments are optional:
+
+* `share_notes` - (Optional) A directory share request that is sent by the directory owner to the directory consumer.
 
 ### share_target Reference
 
