@@ -662,6 +662,8 @@ func Provider() *schema.Provider {
 			"aws_directory_service_directory":                         resourceAwsDirectoryServiceDirectory(),
 			"aws_directory_service_conditional_forwarder":             resourceAwsDirectoryServiceConditionalForwarder(),
 			"aws_directory_service_log_subscription":                  resourceAwsDirectoryServiceLogSubscription(),
+			"aws_directory_service_share_directory":                   resourceAwsDirectoryServiceShareDirectory(),
+			"aws_directory_service_share_directory_accepter":          resourceAwsDirectoryServiceShareDirectoryAccepter(),
 			"aws_dlm_lifecycle_policy":                                resourceAwsDlmLifecyclePolicy(),
 			"aws_dms_certificate":                                     resourceAwsDmsCertificate(),
 			"aws_dms_endpoint":                                        resourceAwsDmsEndpoint(),
