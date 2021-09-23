@@ -1,6 +1,7 @@
 package waiter
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -14,6 +15,7 @@ const (
 	DirectoryCreatedTimeout        = 60 * time.Minute
 	DirectoryDeletedTimeout        = 60 * time.Minute
 	ShareDirectoryOperationTimeout = 4 * time.Minute
+	ShareDirectoryDeletedTimeout   = 5 * time.Minute
 )
 
 func DirectoryCreated(conn *directoryservice.DirectoryService, id string) (*directoryservice.DirectoryDescription, error) {
@@ -48,6 +50,42 @@ func DirectoryDeleted(conn *directoryservice.DirectoryService, id string) (*dire
 	if output, ok := outputRaw.(*directoryservice.DirectoryDescription); ok {
 		tfresource.SetLastError(err, errors.New(aws.StringValue(output.StageReason)))
 
+		return output, err
+	}
+
+	return nil, err
+}
+
+func ShareDirectoryShared(ctx context.Context, conn *directoryservice.DirectoryService, directoryID, sharedDirectoryID string) (*directoryservice.SharedDirectory, error) {
+	stateConf := &resource.StateChangeConf{
+		Pending: []string{directoryservice.ShareStatusSharing},
+		Target:  []string{directoryservice.ShareStatusShared, directoryservice.ShareStatusShareFailed},
+		Refresh: ShareDirectoryStatus(ctx, conn, directoryID, sharedDirectoryID),
+		Timeout: ShareDirectoryDeletedTimeout,
+	}
+
+	outputRaw, err := stateConf.WaitForStateContext(ctx)
+
+	if output, ok := outputRaw.(*directoryservice.SharedDirectory); ok {
+		tfresource.SetLastError(err, errors.New(aws.StringValue(output.ShareStatus)))
+
+		return output, err
+	}
+
+	return nil, err
+}
+
+func ShareDirectoryDeleted(ctx context.Context, conn *directoryservice.DirectoryService, directoryID, sharedDirectoryID string) (*directoryservice.SharedDirectory, error) {
+	stateConf := &resource.StateChangeConf{
+		Pending: []string{directoryservice.ShareStatusDeleting},
+		Target:  []string{directoryservice.ShareStatusDeleted},
+		Refresh: ShareDirectoryStatus(ctx, conn, directoryID, sharedDirectoryID),
+		Timeout: ShareDirectoryDeletedTimeout,
+	}
+
+	outputRaw, err := stateConf.WaitForStateContext(ctx)
+
+	if output, ok := outputRaw.(*directoryservice.SharedDirectory); ok {
 		return output, err
 	}
 
