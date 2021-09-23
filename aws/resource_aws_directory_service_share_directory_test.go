@@ -72,9 +72,9 @@ func testAccCheckDirectoryServiceShareDirectoryDestroy(s *terraform.State) error
 
 		input := &directoryservice.DescribeSharedDirectoriesInput{
 			SharedDirectoryIds: []*string{aws.String(rs.Primary.ID)},
+			OwnerDirectoryId:   aws.String(rs.Primary.Attributes["directory_id"]),
 		}
 		out, err := conn.DescribeSharedDirectoriesWithContext(context.Background(), input)
-
 		if tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeEntityDoesNotExistException) {
 			continue
 		}
@@ -105,19 +105,15 @@ func testAccCheckServiceShareDirectoryExists(name string, output *directoryservi
 		conn := testAccProvider.Meta().(*AWSClient).dsconn
 		out, err := conn.DescribeSharedDirectoriesWithContext(context.Background(), &directoryservice.DescribeSharedDirectoriesInput{
 			SharedDirectoryIds: []*string{aws.String(rs.Primary.ID)},
+			OwnerDirectoryId:   aws.String(rs.Primary.Attributes["directory_id"]),
 		})
 
 		if err != nil {
 			return err
 		}
 
-		if len(out.SharedDirectories) < 1 {
-			return fmt.Errorf("No DS directory found")
-		}
-
-		if *out.SharedDirectories[0].SharedDirectoryId != rs.Primary.ID {
-			return fmt.Errorf("DS share directory ID mismatch - existing: %q, state: %q",
-				*out.SharedDirectories[0].SharedDirectoryId, rs.Primary.ID)
+		if out != nil && len(out.SharedDirectories) == 0 {
+			return fmt.Errorf("No DS share directory found")
 		}
 
 		*output = *out.SharedDirectories[0]
@@ -177,7 +173,7 @@ resource "aws_subnet" "test2" {
 `
 
 func testAccDirectoryServiceShareDirectoryConfig() string {
-	return  testAccDirectoryServiceDirectoryConfigBaseAlternate + `
+	return testAccDirectoryServiceDirectoryConfigBaseAlternate + `
 data "aws_caller_identity" "member" {}
 
 resource "aws_directory_service_directory" "test" {

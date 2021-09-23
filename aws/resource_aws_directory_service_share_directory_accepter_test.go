@@ -35,14 +35,12 @@ func TestAccAWSDirectoryServiceShareDirectoryAccepter_basic(t *testing.T) {
 }
 
 func testAccDirectoryServiceShareDirectoryAccepterConfig() string {
-	return testAccAlternateAccountProviderConfig() + testAccDirectoryServiceDirectoryConfigBase + `
-data "aws_caller_identity" "admin" {
-  provider = "awsalternate"
-}
-
+	return testAccDirectoryServiceDirectoryConfigBaseAlternate + `
 data "aws_caller_identity" "member" {}
 
 resource "aws_directory_service_directory" "test" {
+  provider = "awsalternate"
+
   name     = "corp.notexample.com"
   password = "SuperSecretPassw0rd"
   type     = "MicrosoftAD"
@@ -52,18 +50,19 @@ resource "aws_directory_service_directory" "test" {
     vpc_id     = aws_vpc.test.id
     subnet_ids = [aws_subnet.test1.id, aws_subnet.test2.id]
   }
-  depends_on = [aws_caller_identity.admin]
+  depends_on = [data.aws_caller_identity.admin]
 }
 
 resource "aws_directory_service_share_directory" "test" {
   provider = "awsalternate"
+
   directory_id = aws_directory_service_directory.test.id
-  share_method = "ORGANIZATIONS"
+  share_method = "HANDSHAKE"
   share_notes  = "Terraform testing"
 
   share_target {
     id   = data.aws_caller_identity.member.account_id
-    type = ["ACCOUNT"]
+    type = "ACCOUNT"
   }
 }
 

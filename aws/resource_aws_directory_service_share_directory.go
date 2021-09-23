@@ -49,7 +49,7 @@ func resourceAwsDirectoryServiceShareDirectory() *schema.Resource {
 			},
 			"share_method": {
 				Type:         schema.TypeString,
-				Required:     true,
+				Optional:     true,
 				ForceNew:     true,
 				ValidateFunc: validation.StringInSlice(directoryservice.ShareMethod_Values(), false),
 			},
@@ -58,6 +58,14 @@ func resourceAwsDirectoryServiceShareDirectory() *schema.Resource {
 				Required:     true,
 				ForceNew:     true,
 				ValidateFunc: validation.StringLenBetween(0, 1024),
+			},
+			"shared_account_id": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"share_status": {
+				Type:     schema.TypeString,
+				Computed: true,
 			},
 			"share_target": {
 				Type:     schema.TypeList,
@@ -87,11 +95,16 @@ func resourceAwsDirectoryServiceShareDirectory() *schema.Resource {
 
 func resourceAwsDirectoryServiceShareDirectoryCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	conn := meta.(*AWSClient).dsconn
+
+	directoryID := d.Get("directory_id").(string)
 	input := &directoryservice.ShareDirectoryInput{
-		DirectoryId: aws.String(d.Get("directory_id").(string)),
+		DirectoryId: aws.String(directoryID),
 		ShareMethod: aws.String(d.Get("share_method").(string)),
-		ShareNotes:  aws.String(d.Get("share_notes").(string)),
 		ShareTarget: expandShareDirectories(d.Get("share_target").([]interface{})),
+	}
+
+	if v, ok := d.GetOk("share_notes"); ok {
+		input.ShareNotes = aws.String(v.(string))
 	}
 
 	var err error
@@ -117,6 +130,11 @@ func resourceAwsDirectoryServiceShareDirectoryCreate(ctx context.Context, d *sch
 		return diag.FromErr(fmt.Errorf("error creating Directory Service Share Directory (%s): %w", d.Id(), err))
 	}
 
+	_, err = waiter.ShareDirectoryShared(ctx, conn, directoryID, aws.StringValue(output.SharedDirectoryId))
+	if err != nil {
+		return diag.FromErr(fmt.Errorf("error waiting for Directory Service Share Directory (%s) to be shared: %w", d.Id(), err))
+	}
+
 	d.SetId(aws.StringValue(output.SharedDirectoryId))
 
 	return resourceAwsDirectoryServiceShareDirectoryRead(ctx, d, meta)
@@ -124,7 +142,11 @@ func resourceAwsDirectoryServiceShareDirectoryCreate(ctx context.Context, d *sch
 
 func resourceAwsDirectoryServiceShareDirectoryRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	conn := meta.(*AWSClient).dsconn
-	resp, err := conn.DescribeSharedDirectoriesWithContext(ctx, &directoryservice.DescribeSharedDirectoriesInput{SharedDirectoryIds: []*string{aws.String(d.Id())}})
+
+	resp, err := conn.DescribeSharedDirectoriesWithContext(ctx, &directoryservice.DescribeSharedDirectoriesInput{
+		SharedDirectoryIds: []*string{aws.String(d.Id())},
+		OwnerDirectoryId:   aws.String(d.Get("directory_id").(string)),
+	})
 	if !d.IsNewResource() && tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeDirectoryNotSharedException) {
 		log.Printf("[WARN] Directory Service Share Directory (%s) not found, removing from state", d.Id())
 		d.SetId("")
@@ -141,7 +163,6 @@ func resourceAwsDirectoryServiceShareDirectoryRead(ctx context.Context, d *schem
 		d.Set("owner_account_id", v.SharedAccountId)
 		d.Set("owner_directory_id", v.SharedDirectoryId)
 		d.Set("shared_account_id", v.SharedAccountId)
-		d.Set("shared_directory_id", v.SharedDirectoryId)
 		d.Set("share_method", v.ShareMethod)
 		d.Set("share_notes", v.ShareNotes)
 		d.Set("share_status", v.ShareStatus)
@@ -154,8 +175,9 @@ func resourceAwsDirectoryServiceShareDirectoryRead(ctx context.Context, d *schem
 func resourceAwsDirectoryServiceShareDirectoryDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	conn := meta.(*AWSClient).dsconn
 
+	directoryID := d.Get("directory_id").(string)
 	input := &directoryservice.UnshareDirectoryInput{
-		DirectoryId:   aws.String(d.Id()),
+		DirectoryId:   aws.String(directoryID),
 		UnshareTarget: expandUnShareDirectories(d.Get("share_target").([]interface{})),
 	}
 
@@ -168,6 +190,11 @@ func resourceAwsDirectoryServiceShareDirectoryDelete(ctx context.Context, d *sch
 
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error deleting Directory Service Share Directory (%s): %w", d.Id(), err))
+	}
+
+	_, err = waiter.ShareDirectoryDeleted(ctx, conn, directoryID, d.Id())
+	if err != nil {
+		return diag.FromErr(fmt.Errorf("error waiting for Directory Service Share Directory (%s) to be deleted: %w", d.Id(), err))
 	}
 
 	return nil
