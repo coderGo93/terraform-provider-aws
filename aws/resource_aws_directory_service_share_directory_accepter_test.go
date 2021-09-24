@@ -11,7 +11,7 @@ import (
 func TestAccAWSDirectoryServiceShareDirectoryAccepter_basic(t *testing.T) {
 	var output directoryservice.SharedDirectory
 	var providers []*schema.Provider
-	resourceName := "aws_directory_service_share_directory_accepter.test"
+	resourceName := "aws_directory_service_share_directory.test"
 
 	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:          func() { testAccPreCheck(t); testAccPreCheckAWSDirectoryService(t) },
@@ -35,12 +35,12 @@ func TestAccAWSDirectoryServiceShareDirectoryAccepter_basic(t *testing.T) {
 }
 
 func testAccDirectoryServiceShareDirectoryAccepterConfig() string {
-	return testAccDirectoryServiceDirectoryConfigBaseAlternate + `
-data "aws_caller_identity" "member" {}
+	return testAccDirectoryServiceShareDirectoryConfigBase + `
+data "aws_caller_identity" "member" {
+  provider = "awsalternate"
+}
 
 resource "aws_directory_service_directory" "test" {
-  provider = "awsalternate"
-
   name     = "corp.notexample.com"
   password = "SuperSecretPassw0rd"
   type     = "MicrosoftAD"
@@ -54,8 +54,6 @@ resource "aws_directory_service_directory" "test" {
 }
 
 resource "aws_directory_service_share_directory" "test" {
-  provider = "awsalternate"
-
   directory_id = aws_directory_service_directory.test.id
   share_method = "HANDSHAKE"
   share_notes  = "Terraform testing"
@@ -67,6 +65,8 @@ resource "aws_directory_service_share_directory" "test" {
 }
 
 resource "aws_directory_service_share_directory_accepter" "test" {
+  provider = "awsalternate"
+
   shared_directory_id = aws_directory_service_share_directory.test.id
 }
 `

@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"log"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -71,11 +72,13 @@ func testAccCheckDirectoryServiceShareDirectoryDestroy(s *terraform.State) error
 		}
 
 		input := &directoryservice.DescribeSharedDirectoriesInput{
-			SharedDirectoryIds: []*string{aws.String(rs.Primary.ID)},
+			SharedDirectoryIds: []*string{aws.String(rs.Primary.Attributes["shared_directory_id"])},
 			OwnerDirectoryId:   aws.String(rs.Primary.Attributes["directory_id"]),
 		}
 		out, err := conn.DescribeSharedDirectoriesWithContext(context.Background(), input)
-		if tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeEntityDoesNotExistException) {
+		log.Printf("[DEBIG] testAccCheckDirectoryServiceShareDirectoryDestroy invoked")
+		if tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeEntityDoesNotExistException) ||
+			tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeDirectoryNotSharedException) {
 			continue
 		}
 
@@ -103,10 +106,12 @@ func testAccCheckServiceShareDirectoryExists(name string, output *directoryservi
 		}
 
 		conn := testAccProvider.Meta().(*AWSClient).dsconn
+
 		out, err := conn.DescribeSharedDirectoriesWithContext(context.Background(), &directoryservice.DescribeSharedDirectoriesInput{
-			SharedDirectoryIds: []*string{aws.String(rs.Primary.ID)},
+			SharedDirectoryIds: []*string{aws.String(rs.Primary.Attributes["shared_directory_id"])},
 			OwnerDirectoryId:   aws.String(rs.Primary.Attributes["directory_id"]),
 		})
+		log.Printf("[DEBIG] testAccCheckServiceShareDirectoryExists invoked")
 
 		if err != nil {
 			return err
@@ -122,14 +127,10 @@ func testAccCheckServiceShareDirectoryExists(name string, output *directoryservi
 	}
 }
 
-var testAccDirectoryServiceDirectoryConfigBaseAlternate = testAccAlternateAccountProviderConfig() + `
-data "aws_caller_identity" "admin" {
-  provider = "awsalternate"
-}
+var testAccDirectoryServiceShareDirectoryConfigBase = testAccAlternateAccountProviderConfig() + `
+data "aws_caller_identity" "admin" {}
 
 data "aws_availability_zones" "available" {
-  provider = "awsalternate"
-
   state = "available"
 
   filter {
@@ -139,8 +140,6 @@ data "aws_availability_zones" "available" {
 }
 
 resource "aws_vpc" "test" {
-  provider = "awsalternate"
-
   cidr_block = "10.0.0.0/16"
   tags = {
     Name = "terraform-testacc-directory-service-directory-tags"
@@ -150,8 +149,6 @@ resource "aws_vpc" "test" {
 }
 
 resource "aws_subnet" "test1" {
-  provider = "awsalternate"
-
   vpc_id            = aws_vpc.test.id
   availability_zone = data.aws_availability_zones.available.names[0]
   cidr_block        = "10.0.1.0/24"
@@ -161,8 +158,6 @@ resource "aws_subnet" "test1" {
 }
 
 resource "aws_subnet" "test2" {
-  provider = "awsalternate"
-
   vpc_id            = aws_vpc.test.id
   availability_zone = data.aws_availability_zones.available.names[1]
   cidr_block        = "10.0.2.0/24"
@@ -173,12 +168,12 @@ resource "aws_subnet" "test2" {
 `
 
 func testAccDirectoryServiceShareDirectoryConfig() string {
-	return testAccDirectoryServiceDirectoryConfigBaseAlternate + `
-data "aws_caller_identity" "member" {}
+	return testAccDirectoryServiceShareDirectoryConfigBase + `
+data "aws_caller_identity" "member" {
+  provider = "awsalternate"
+}
 
 resource "aws_directory_service_directory" "test" {
-  provider = "awsalternate"
-
   name     = "corp.notexample.com"
   password = "SuperSecretPassw0rd"
   type     = "MicrosoftAD"
@@ -192,8 +187,6 @@ resource "aws_directory_service_directory" "test" {
 }
 
 resource "aws_directory_service_share_directory" "test" {
-  provider = "awsalternate"
-
   directory_id = aws_directory_service_directory.test.id
   share_method = "ORGANIZATIONS"
   share_notes  = "Terraform testing"

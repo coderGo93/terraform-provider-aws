@@ -87,12 +87,12 @@ In addition to all arguments above, the following attributes are exported:
 * `owner_account_id` - Identifier of the directory owner account, which contains the directory that has been shared to the consumer account.
 * `owner_directory_id` - Identifier of the directory in the directory owner account.
 * `shared_account_id` - Identifier of the directory consumer account that has access to the shared directory (`owner_directory_id`) in the directory owner account.
-* `shared_directory_id` - Date and time, in UTC and extended RFC 3339 format, when the directory service shared.
+* `shared_directory_id` - Identifier of the directory that is stored in the directory consumer account that is shared from the specified directory.
 
 ## Import
 
-DirectoryService shared  directories can be imported using the directory `id`, e.g.
+DirectoryService shared  directories can be imported using the directory `DIRECTORY-ID/SHARED-DIRECTORY-ID`, e.g.
 
 ```
-$ terraform import aws_directory_service_share_directory.example sharedDirectoryID
+$ terraform import aws_directory_service_share_directory.example directoryID/sharedDirectoryID
 ```

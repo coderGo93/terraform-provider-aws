@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/terraform-providers/terraform-provider-aws/aws/internal/service/directoryservice/waiter"
 )
 
 func resourceAwsDirectoryServiceShareDirectoryAccepter() *schema.Resource {
@@ -97,12 +96,6 @@ func resourceAwsDirectoryServiceShareDirectoryAccepterDelete(ctx context.Context
 
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("error deleting Directory Service Share Directory Accepter (%s): %w", d.Id(), err))
-	}
-
-	_, err = waiter.DirectoryDeleted(conn, d.Id())
-
-	if err != nil {
-		return diag.FromErr(fmt.Errorf("error waiting for Directory Service Share Directory Accepter (%s) to delete: %w", d.Id(), err))
 	}
 
 	return nil
