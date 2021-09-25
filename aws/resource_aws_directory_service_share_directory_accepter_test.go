@@ -9,9 +9,7 @@ import (
 )
 
 func TestAccAWSDirectoryServiceShareDirectoryAccepter_basic(t *testing.T) {
-	var output directoryservice.SharedDirectory
 	var providers []*schema.Provider
-	resourceName := "aws_directory_service_share_directory.test"
 
 	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:          func() { testAccPreCheck(t); testAccPreCheckAWSDirectoryService(t) },
@@ -20,22 +18,13 @@ func TestAccAWSDirectoryServiceShareDirectoryAccepter_basic(t *testing.T) {
 		CheckDestroy:      testAccCheckDirectoryServiceShareDirectoryDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccDirectoryServiceShareDirectoryAccepterConfig(),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckServiceShareDirectoryExists(resourceName, &output),
-				),
-			},
-			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				Config: testAccDirectoryServiceShareDirectoryAccepterConfig,
 			},
 		},
 	})
 }
 
-func testAccDirectoryServiceShareDirectoryAccepterConfig() string {
-	return testAccDirectoryServiceShareDirectoryConfigBase + `
+var testAccDirectoryServiceShareDirectoryAccepterConfig = testAccDirectoryServiceShareDirectoryConfigBase + `
 data "aws_caller_identity" "member" {
   provider = "awsalternate"
 }
@@ -67,7 +56,6 @@ resource "aws_directory_service_share_directory" "test" {
 resource "aws_directory_service_share_directory_accepter" "test" {
   provider = "awsalternate"
 
-  shared_directory_id = aws_directory_service_share_directory.test.id
+  shared_directory_id = aws_directory_service_share_directory.test.shared_directory_id
 }
 `
-}

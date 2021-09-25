@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/directoryservice"
@@ -16,11 +15,8 @@ import (
 func resourceAwsDirectoryServiceShareDirectoryAccepter() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceAwsDirectoryServiceShareDirectoryAccepterCreate,
-		ReadContext:   resourceAwsDirectoryServiceShareDirectoryAccepterRead,
-		DeleteContext: resourceAwsDirectoryServiceShareDirectoryAccepterDelete,
-		Importer: &schema.ResourceImporter{
-			StateContext: schema.ImportStatePassthroughContext,
-		},
+		ReadContext:   schema.NoopContext,
+		DeleteContext: schema.NoopContext,
 		Schema: map[string]*schema.Schema{
 			"shared_directory_id": {
 				Type:     schema.TypeString,
@@ -44,7 +40,6 @@ func resourceAwsDirectoryServiceShareDirectoryAccepterCreate(ctx context.Context
 			if tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeDirectoryDoesNotExistException) {
 				return resource.RetryableError(err)
 			}
-
 			return resource.NonRetryableError(err)
 		}
 
@@ -59,44 +54,7 @@ func resourceAwsDirectoryServiceShareDirectoryAccepterCreate(ctx context.Context
 		return diag.FromErr(fmt.Errorf("error creating Directory Service Share Directory Accepter (%s): %w", d.Id(), err))
 	}
 
-	d.SetId(d.Get("shared_directory_id").(string))
-
-	return resourceAwsDirectoryServiceShareDirectoryAccepterRead(ctx, d, meta)
-}
-
-func resourceAwsDirectoryServiceShareDirectoryAccepterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	conn := meta.(*AWSClient).dsconn
-	_, err := conn.DescribeSharedDirectoriesWithContext(ctx, &directoryservice.DescribeSharedDirectoriesInput{SharedDirectoryIds: []*string{aws.String(d.Id())}})
-	if !d.IsNewResource() && tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeDirectoryNotSharedException) ||
-		tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeDirectoryNotSharedException) {
-		log.Printf("[WARN] Directory Service Share Directory Accepter (%s) not found, removing from state", d.Id())
-		d.SetId("")
-		return nil
-	}
-
-	if err != nil {
-		return diag.FromErr(fmt.Errorf("error reading Directory Service Share Directory Accepter (%s): %w", d.Id(), err))
-	}
-
-	return nil
-}
-
-func resourceAwsDirectoryServiceShareDirectoryAccepterDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	conn := meta.(*AWSClient).dsconn
-
-	input := &directoryservice.RejectSharedDirectoryInput{
-		SharedDirectoryId: aws.String(d.Id()),
-	}
-
-	_, err := conn.RejectSharedDirectoryWithContext(ctx, input)
-
-	if tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeEntityDoesNotExistException) {
-		return nil
-	}
-
-	if err != nil {
-		return diag.FromErr(fmt.Errorf("error deleting Directory Service Share Directory Accepter (%s): %w", d.Id(), err))
-	}
+	d.SetId(meta.(*AWSClient).accountid)
 
 	return nil
 }

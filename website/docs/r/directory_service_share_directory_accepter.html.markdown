@@ -61,7 +61,7 @@ resource "aws_directory_service_share_directory" "example" {
 }
 
 resource "aws_directory_service_share_directory_accepter" "example" {
-  shared_directory_id = aws_directory_service_share_directory.test.id
+  shared_directory_id = aws_directory_service_share_directory.test.shared_directory_id
 }
 ```
 
@@ -76,12 +76,4 @@ The following arguments are required:
 
 In addition to all arguments above, the following attributes are exported:
 
-* `id` - Shared directory identifier.
-
-## Import
-
-DirectoryService shared directories can be imported using the directory `id`, e.g.
-
-```
-$ terraform import aws_directory_service_share_directory.example sharedDirectoryID
-```
+* `id` - ID of shared directory accepter.

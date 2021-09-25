@@ -151,7 +151,6 @@ func resourceAwsDirectoryServiceShareDirectoryCreate(ctx context.Context, d *sch
 		}
 	}
 
-	log.Printf("[DEBIG] resourceAwsDirectoryServiceShareDirectoryCreate invoked")
 	d.SetId(fmt.Sprintf("%s/%s", directoryID, aws.StringValue(output.SharedDirectoryId)))
 
 	return resourceAwsDirectoryServiceShareDirectoryRead(ctx, d, meta)
@@ -169,7 +168,6 @@ func resourceAwsDirectoryServiceShareDirectoryRead(ctx context.Context, d *schem
 		SharedDirectoryIds: []*string{aws.String(sharedDirectoryID)},
 		OwnerDirectoryId:   aws.String(directoryID),
 	})
-	log.Printf("[DEBIG] resourceAwsDirectoryServiceShareDirectoryRead invoked")
 	if !d.IsNewResource() && tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeEntityDoesNotExistException) ||
 		tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeDirectoryNotSharedException) {
 		log.Printf("[WARN] Directory Service Share Directory (%s) not found, removing from state", d.Id())
@@ -183,9 +181,10 @@ func resourceAwsDirectoryServiceShareDirectoryRead(ctx context.Context, d *schem
 	for _, v := range resp.SharedDirectories {
 
 		d.Set("created_date_time", aws.TimeValue(v.CreatedDateTime).Format(time.RFC3339))
+		d.Set("directory_id", v.OwnerDirectoryId)
 		d.Set("last_updated_date_time", aws.TimeValue(v.LastUpdatedDateTime).Format(time.RFC3339))
-		d.Set("owner_account_id", v.SharedAccountId)
-		d.Set("owner_directory_id", v.SharedDirectoryId)
+		d.Set("owner_account_id", v.OwnerAccountId)
+		d.Set("owner_directory_id", v.OwnerDirectoryId)
 		d.Set("shared_account_id", v.SharedAccountId)
 		d.Set("shared_directory_id", v.SharedDirectoryId)
 		d.Set("share_method", v.ShareMethod)
@@ -211,7 +210,6 @@ func resourceAwsDirectoryServiceShareDirectoryDelete(ctx context.Context, d *sch
 	}
 
 	_, err = conn.UnshareDirectoryWithContext(ctx, input)
-	log.Printf("[DEBIG] resourceAwsDirectoryServiceShareDirectoryDelete invoked")
 
 	if tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeEntityDoesNotExistException) ||
 		tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeDirectoryNotSharedException) {

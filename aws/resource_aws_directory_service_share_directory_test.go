@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"log"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -26,15 +25,19 @@ func TestAccAWSDirectoryServiceShareDirectory_basic(t *testing.T) {
 		CheckDestroy:      testAccCheckDirectoryServiceShareDirectoryDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccDirectoryServiceShareDirectoryConfig(),
+				Config: testAccDirectoryServiceShareDirectoryConfig,
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckServiceShareDirectoryExists(resourceName, &output),
+					resource.TestCheckResourceAttr(resourceName, "share_status", directoryservice.ShareStatusShared),
+					testAccCheckResourceAttrRfc3339(resourceName, "created_date_time"),
+					testAccCheckResourceAttrRfc3339(resourceName, "last_updated_date_time"),
 				),
 			},
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            resourceName,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"share_target"},
 			},
 		},
 	})
@@ -52,12 +55,41 @@ func TestAccAWSDirectoryServiceShareDirectory_disappears(t *testing.T) {
 		CheckDestroy:      testAccCheckDirectoryServiceShareDirectoryDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccDirectoryServiceShareDirectoryConfig(),
+				Config: testAccDirectoryServiceShareDirectoryConfig,
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckServiceShareDirectoryExists(resourceName, &output),
 					testAccCheckResourceDisappears(testAccProvider, resourceAwsDirectoryServiceShareDirectory(), resourceName),
 				),
-				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+func TestAccAWSDirectoryServiceShareDirectory_invite(t *testing.T) {
+	var output directoryservice.SharedDirectory
+	var providers []*schema.Provider
+	resourceName := "aws_directory_service_share_directory.test"
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:          func() { testAccPreCheck(t); testAccPreCheckAWSDirectoryService(t) },
+		ErrorCheck:        testAccErrorCheck(t, directoryservice.EndpointsID),
+		ProviderFactories: testAccProviderFactoriesAlternate(&providers),
+		CheckDestroy:      testAccCheckDirectoryServiceShareDirectoryDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccDirectoryServiceShareDirectoryConfigInvite,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckServiceShareDirectoryExists(resourceName, &output),
+					resource.TestCheckResourceAttr(resourceName, "share_status", directoryservice.ShareStatusPendingAcceptance),
+					testAccCheckResourceAttrRfc3339(resourceName, "created_date_time"),
+					testAccCheckResourceAttrRfc3339(resourceName, "last_updated_date_time"),
+				),
+			},
+			{
+				ResourceName:            resourceName,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"share_target"},
 			},
 		},
 	})
@@ -73,10 +105,9 @@ func testAccCheckDirectoryServiceShareDirectoryDestroy(s *terraform.State) error
 
 		input := &directoryservice.DescribeSharedDirectoriesInput{
 			SharedDirectoryIds: []*string{aws.String(rs.Primary.Attributes["shared_directory_id"])},
-			OwnerDirectoryId:   aws.String(rs.Primary.Attributes["directory_id"]),
+			OwnerDirectoryId:   aws.String(rs.Primary.Attributes["owner_directory_id"]),
 		}
 		out, err := conn.DescribeSharedDirectoriesWithContext(context.Background(), input)
-		log.Printf("[DEBIG] testAccCheckDirectoryServiceShareDirectoryDestroy invoked")
 		if tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeEntityDoesNotExistException) ||
 			tfawserr.ErrCodeEquals(err, directoryservice.ErrCodeDirectoryNotSharedException) {
 			continue
@@ -109,9 +140,8 @@ func testAccCheckServiceShareDirectoryExists(name string, output *directoryservi
 
 		out, err := conn.DescribeSharedDirectoriesWithContext(context.Background(), &directoryservice.DescribeSharedDirectoriesInput{
 			SharedDirectoryIds: []*string{aws.String(rs.Primary.Attributes["shared_directory_id"])},
-			OwnerDirectoryId:   aws.String(rs.Primary.Attributes["directory_id"]),
+			OwnerDirectoryId:   aws.String(rs.Primary.Attributes["owner_directory_id"]),
 		})
-		log.Printf("[DEBIG] testAccCheckServiceShareDirectoryExists invoked")
 
 		if err != nil {
 			return err
@@ -167,8 +197,7 @@ resource "aws_subnet" "test2" {
 }
 `
 
-func testAccDirectoryServiceShareDirectoryConfig() string {
-	return testAccDirectoryServiceShareDirectoryConfigBase + `
+var testAccDirectoryServiceShareDirectoryConfig = testAccDirectoryServiceShareDirectoryConfigBase + `
 data "aws_caller_identity" "member" {
   provider = "awsalternate"
 }
@@ -197,4 +226,33 @@ resource "aws_directory_service_share_directory" "test" {
   }
 }
 `
+
+var testAccDirectoryServiceShareDirectoryConfigInvite = testAccDirectoryServiceShareDirectoryConfigBase + `
+data "aws_caller_identity" "member" {
+  provider = "awsalternate"
 }
+
+resource "aws_directory_service_directory" "test" {
+  name     = "corp.notexample.com"
+  password = "SuperSecretPassw0rd"
+  type     = "MicrosoftAD"
+  edition  = "Standard"
+
+  vpc_settings {
+    vpc_id     = aws_vpc.test.id
+    subnet_ids = [aws_subnet.test1.id, aws_subnet.test2.id]
+  }
+  depends_on = [data.aws_caller_identity.admin]
+}
+
+resource "aws_directory_service_share_directory" "test" {
+  directory_id = aws_directory_service_directory.test.id
+  share_method = "HANDSHAKE"
+  share_notes  = "Terraform testing"
+
+  share_target {
+    id   = data.aws_caller_identity.member.account_id
+    type = "ACCOUNT"
+  }
+}
+`

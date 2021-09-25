@@ -91,8 +91,8 @@ In addition to all arguments above, the following attributes are exported:
 
 ## Import
 
-DirectoryService shared  directories can be imported using the directory `DIRECTORY-ID/SHARED-DIRECTORY-ID`, e.g.
+DirectoryService shared directories can be imported using the directory `OWNER-DIRECTORY-ID/SHARED-DIRECTORY-ID`, e.g.
 
 ```
-$ terraform import aws_directory_service_share_directory.example directoryID/sharedDirectoryID
+$ terraform import aws_directory_service_share_directory.example ownerDirectoryID/sharedDirectoryID
 ```
